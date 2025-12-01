@@ -85,7 +85,7 @@ def simulate_furuta(
             Ad.T,
             Cd.T,
             np.diag([1.0, 1.0, 1.0, 1.0]),
-            np.array([[0.01]]),
+            np.diag([0.01,0.01]),
         ).T
         Fc = None
         Foc = None
@@ -95,7 +95,7 @@ def simulate_furuta(
             Ac.T,
             Cc.T,
             np.diag([1.0, 1.0, 1.0, 1.0]),
-            np.array([[0.01]]),
+            np.diag([0.01,0.01]),
         ).T
         Fd = None
         Fod = None
