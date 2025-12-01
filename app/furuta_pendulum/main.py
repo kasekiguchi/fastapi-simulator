@@ -1,48 +1,49 @@
-# Path: main.py
+# Path: app/furuta_pendulum/main.py
+from __future__ import annotations
+
 from typing import List
+
+import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.simulation import simulate_furuta, SimConfig
+from .simulator import simulate_furuta, SimConfig
 
-
-# ==== FastAPI 本体 ====
 
 app = FastAPI(
     title="Furuta Pendulum API",
     version="0.1.0",
-    description="Furuta pendulum simulation backend (LQR + observer/EKF).",
+    description="Furuta pendulum simulation backend (for web frontends).",
 )
 
-# CORS (必要に応じて your URL に変えてください)
 origins = [
     "http://localhost:3000",
-    "https://acsl-simulator.vercel.app",
+    # Next.js をデプロイした URL に合わせて書き換え
+    "https://your-next-app.vercel.app",
 ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # とりあえず ["*"] にしておいてもOK
+    allow_origins=origins,  # 開発中なら ["*"] でもOK
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ==== Pydantic モデル ====
-
 class SimRequest(BaseModel):
-    init: List[float]  # [theta1, theta2, dtheta1, dtheta2]
+    init: List[float]  # [p, th, dp, dth]
     dt: float = 0.01
     duration: float = 10.0
-    time_mode: str = "discrete"   # "discrete" / "continuous"
-    estimator: str = "observer"   # "observer" / "EKF"
+    time_mode: str = "discrete"   # "discrete" or "continuous"
+    estimator: str = "observer"   # "observer" or "EKF"
 
 
 class SimState(BaseModel):
     t: float
-    y: List[float]      # [theta1, theta2]
-    xhat: List[float]   # [theta1, theta2, dtheta1, dtheta2]
+    y: List[float]
+    xhat: List[float]
     u: float
 
 
@@ -60,7 +61,7 @@ async def run_sim(req: SimRequest):
     config = SimConfig(
         dt=req.dt,
         duration=req.duration,
-        time_mode=req.time_mode,   # 型チェックはここでしても良い
+        time_mode=req.time_mode,   # 簡略化：Literalチェックは省略
         estimator=req.estimator,
     )
 
