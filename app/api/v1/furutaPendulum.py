@@ -1,7 +1,7 @@
 # Path: app/api/v1/furuta.py
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import List
+from typing import  Literal,List
 
 from ...simulators.furuta_pendulum.simulator import simulate_furutaPendulum
 
@@ -9,6 +9,8 @@ router = APIRouter()
 
 
 # ==== Pydantic モデル ====
+TimeMode = Literal["discrete", "continuous"]
+EstimatorMode = Literal["EKF", "observer"]
 
 class SimRequest(BaseModel):
     init: List[float]     # [p, th, dp, dth]
