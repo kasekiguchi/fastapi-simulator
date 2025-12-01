@@ -12,7 +12,7 @@ from .ode import ode
 
 
 @dataclass
-class FurutaParams:
+class FurutaPendulumParams:
     """
     MATLAB コメントに対応:
     [m1 m2 J jx jy jz L lg Dp Dth gravity a]
@@ -68,7 +68,7 @@ class FURUTA_PENDULUM:
         *,
         sys_noise: float = 1e-5,
         measure_noise: Optional[Sequence[float]] = None,
-        params: Optional[FurutaParams] = None,
+        params: Optional[FurutaPendulumParams] = None,
         dead_zone: float = 0.01,
     ) -> None:
         self.state = np.asarray(initial, dtype=float).copy()  # shape (4,)
@@ -83,7 +83,7 @@ class FURUTA_PENDULUM:
         else:
             self.measure_noise = np.asarray(measure_noise, dtype=float)
 
-        self.params = params or FurutaParams()
+        self.params = params or FurutaPendulumParams()
         self.plant_param = self.params.as_array
         self.dead_zone = dead_zone
 

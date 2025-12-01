@@ -20,7 +20,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",
     # Next.js をデプロイした URL に合わせて書き換え
-    "https://your-next-app.vercel.app",
+    "https://acsl-simulator.vercel.app",
 ]
 
 app.add_middleware(

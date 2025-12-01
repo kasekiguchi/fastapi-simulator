@@ -7,8 +7,9 @@ from typing import Literal, TypedDict, List
 import numpy as np
 from scipy import signal, linalg
 
-from .FURUTA_PENDULUM import FURUTA_PENDULUM, FurutaParams
-
+from .FURUTA_PENDULUM import FURUTA_PENDULUM, FurutaPendulumParams
+from .Ac import Ac_furutaPendulum
+from .Bc import Bc_furutaPendulum
 
 TimeMode = Literal["discrete", "continuous"]
 EstimatorMode = Literal["EKF", "observer"]
@@ -55,19 +56,12 @@ def simulate_furuta(
     tspan = np.arange(0.0, te + dt, dt)
 
     # プラント生成（MATLAB: cart = FURUTA_PENDULUM(init);）
-    cart = FURUTA_PENDULUM(init, params=FurutaParams())
+    cart = FURUTA_PENDULUM(init, params=FurutaPendulumParams())
 
-    # 線形モデル（ここは後で Ac_FurutaPendulum(param), Bc_FurutaPendulum(param) に差し替え可）
-    Ac = np.array(
-        [
-            [0, 1, 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1],
-            [0, 0, 0, 0],
-        ],
-        dtype=float,
-    )
-    Bc = np.array([[0], [0], [0], [1]], dtype=float)
+    # 線形モデル
+    Ac = Ac_furutaPendulum(params=FurutaPendulumParams())
+    Bc = Bc_furutaPendulum(params=FurutaPendulumParams())
+    # Bc = np.array([[0], [0], [0], [1]], dtype=float)
     Cc = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
     Dc = np.zeros((2, 1))
 
