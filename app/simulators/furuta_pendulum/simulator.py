@@ -57,7 +57,7 @@ def simulate_furutaPendulum(
     """
     # init = init
     # dt = dt
-    # te = duration
+    te = duration
     tspan = np.arange(0.0, te + dt, dt)
 
     # プラント生成（MATLAB: cart = FURUTA_PENDULUM(init);）
