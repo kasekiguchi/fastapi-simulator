@@ -35,7 +35,7 @@ class SimResponse(BaseModel):
 async def run_furuta_sim(req: SimRequest):
     """
     Furuta 振子のシミュレーションを実行して結果を返す。
-    URL: POST /furuta/simulate
+    URL: POST /furutaPendulum/simulate
     """
     result = simulate_furutaPendulum(
         init=req.init,
