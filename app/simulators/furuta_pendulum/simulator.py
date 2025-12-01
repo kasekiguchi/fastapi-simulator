@@ -16,12 +16,12 @@ EstimatorMode = Literal["EKF", "observer"]
 
 
 @dataclass
-class SimConfig:
-    init: List[float]
-    dt: float = 0.01
-    duration: float = 10.0
-    time_mode: TimeMode = "discrete"
-    estimator: EstimatorMode = "observer"
+# class SimConfig:
+#     init: List[float]
+#     dt: float = 0.01
+#     duration: float = 10.0
+#     time_mode: TimeMode = "discrete"
+#     estimator: EstimatorMode = "observer"
 
 
 class SimResult(TypedDict):
@@ -46,14 +46,18 @@ def lqr(A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray) -> np.ndarra
 
 
 def simulate_furutaPendulum(
-    config: SimConfig,
+    init: List[float],
+    dt: float = 0.01,
+    duration: float = 10.0,
+    time_mode: TimeMode = "discrete",
+    estimator: EstimatorMode = "observer",
 ) -> SimResult:
     """
     MATLAB スクリプトの流れを Python で再現したもの。
     """
-    init = config.init
-    dt = config.dt
-    te = config.duration
+    # init = init
+    # dt = dt
+    # te = duration
     tspan = np.arange(0.0, te + dt, dt)
 
     # プラント生成（MATLAB: cart = FURUTA_PENDULUM(init);）
@@ -66,7 +70,7 @@ def simulate_furutaPendulum(
     Cc = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
     Dc = np.zeros((2, 1))
 
-    if config.time_mode == "discrete":
+    if time_mode == "discrete":
         Ad, Bd, Cd, Dd, _ = signal.cont2discrete((Ac, Bc, Cc, Dc), dt)
     else:
         Ad, Bd, Cd, Dd = None, None, None, None
@@ -74,7 +78,7 @@ def simulate_furutaPendulum(
     Q_lqr = np.diag([1.0, 100.0, 1.0, 1.0])
     R_lqr = np.array([[1.0]])
 
-    if config.time_mode == "discrete":
+    if time_mode == "discrete":
         Fd = dlqr(Ad, Bd, Q_lqr, R_lqr)
         Fod = dlqr(
             Ad.T,
@@ -95,7 +99,7 @@ def simulate_furutaPendulum(
         Fd = None
         Fod = None
 
-    if config.estimator == "EKF":
+    if estimator == "EKF":
         P = np.eye(4)
         Qd = 1.0
         Rd = 0.01 * np.diag([0.02, 0.05])
@@ -119,8 +123,8 @@ def simulate_furutaPendulum(
 
         # 推定
         if i > 0:
-            if config.time_mode == "discrete":
-                if config.estimator == "EKF":
+            if time_mode == "discrete":
+                if estimator == "EKF":
                     xh_pre = Ad @ xh + Bd.flatten() * u
                     P_pre = Ad @ P @ Ad.T + Bd @ (Qd * Bd.T)
                     Gd = (P_pre @ Cd.T) @ np.linalg.inv(Cd @ P_pre @ Cd.T + Rd)
@@ -133,7 +137,7 @@ def simulate_furutaPendulum(
                 xh = xh + dt * dxh
 
         # フィードバック
-        if config.time_mode == "discrete":
+        if time_mode == "discrete":
             u = float(Fd @ (-xh))
         else:
             u = float(Fc @ (-xh))
