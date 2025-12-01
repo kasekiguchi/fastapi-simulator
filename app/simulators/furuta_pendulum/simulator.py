@@ -17,6 +17,7 @@ EstimatorMode = Literal["EKF", "observer"]
 
 @dataclass
 class SimConfig:
+    init: List[float]
     dt: float = 0.01
     duration: float = 10.0
     time_mode: TimeMode = "discrete"
@@ -45,12 +46,12 @@ def lqr(A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray) -> np.ndarra
 
 
 def simulate_furutaPendulum(
-    init: np.ndarray,
     config: SimConfig,
 ) -> SimResult:
     """
     MATLAB スクリプトの流れを Python で再現したもの。
     """
+    init = config.init
     dt = config.dt
     te = config.duration
     tspan = np.arange(0.0, te + dt, dt)

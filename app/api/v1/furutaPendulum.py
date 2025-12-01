@@ -16,8 +16,7 @@ class SimRequest(BaseModel):
     duration: float = 10.0
     time_mode: str = "discrete"   # "discrete" | "continuous"
     estimator: str = "observer"   # "observer" | "EKF"
-
-
+    
 class SimState(BaseModel):
     t: float
     y: List[float]        # [p, th]
@@ -38,11 +37,7 @@ async def run_furuta_sim(req: SimRequest):
     URL: POST /furutaPendulum/simulate
     """
     result = simulate_furutaPendulum(
-        init=req.init,
-        dt=req.dt,
-        duration=req.duration,
-        time_mode=req.time_mode,
-        estimator=req.estimator,
+        config=req
     )
 
     # engine 側から {t: [...], y: [...], xhat: [...], u: [...]} が返る想定
