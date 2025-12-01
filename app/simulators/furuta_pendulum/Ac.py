@@ -40,5 +40,5 @@ def Ac_furutaPendulum( params: np.ndarray) -> np.ndarray:
   t15 = t2+t4+t8+t9
   t16 = t6+t7+t10+t11+t12+t13+t14
   t17 = 1.0/t16
-  A = np.array([[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0],[0.0,L*gravity*m2**2*t5*t17*4.0,Dp*t17*(jx+m2*t5)*-4.0,Dth*L*lg*m2*t17*-4.0][0.0,gravity*lg*m2*t15*t17,Dp*L*lg*m2*t17*-4.0,-Dth*t15*t17]])
+  A = np.array([[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0],[0.0,L*gravity*m2**2*t5*t17*4.0,Dp*t17*(jx+m2*t5)*-4.0,Dth*L*lg*m2*t17*-4.0],[0.0,gravity*lg*m2*t15*t17,Dp*L*lg*m2*t17*-4.0,-Dth*t15*t17]])
   return A
