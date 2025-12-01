@@ -44,7 +44,7 @@ def lqr(A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray) -> np.ndarra
     return K
 
 
-def simulate_furuta(
+def simulate_furutaPendulum(
     init: np.ndarray,
     config: SimConfig,
 ) -> SimResult:
