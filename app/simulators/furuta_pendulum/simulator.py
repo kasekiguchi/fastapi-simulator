@@ -70,6 +70,12 @@ def simulate_furutaPendulum(
     Cc = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
     Dc = np.zeros((2, 1))
 
+    if Bc.ndim == 1:
+        Bc = Bc.reshape(-1, 1)
+    if Cc.ndim == 1:
+        Cc = Cc.reshape(1, -1)
+    if Dc.ndim == 0:
+        Dc = np.array([[Dc]])
     if time_mode == "discrete":
         Ad, Bd, Cd, Dd, _ = signal.cont2discrete((Ac, Bc, Cc, Dc), dt)
     else:

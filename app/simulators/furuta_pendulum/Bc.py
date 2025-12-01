@@ -37,3 +37,4 @@ def Bc_furutaPendulum(params: np.ndarray) -> np.ndarray:
     t11 = t4+t5+t6+t7+t8+t9+t10
     t12 = 1.0/t11
     B = np.array([[0.0],[0.0],[a*t12*(jx+m2*t3)*4.0],[L*a*lg*m2*t12*4.0]])
+    return B
