@@ -64,8 +64,8 @@ def simulate_furutaPendulum(
     cart = FURUTA_PENDULUM(init, params=FurutaPendulumParams())
 
     # 線形モデル
-    Ac = Ac_furutaPendulum(params=FurutaPendulumParams())
-    Bc = Bc_furutaPendulum(params=FurutaPendulumParams())
+    Ac = Ac_furutaPendulum(params=FurutaPendulumParams().as_array)
+    Bc = Bc_furutaPendulum(params=FurutaPendulumParams().as_array)
     # Bc = np.array([[0], [0], [0], [1]], dtype=float)
     Cc = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
     Dc = np.zeros((2, 1))
