@@ -31,8 +31,8 @@ class PublicFurutaState(SimState):
     """フロントへ送るための状態（必要な分だけ切り出し）"""
     theta: float = 0.0
     dtheta: float = 0.0
-    alpha: float = 0.0
-    dalpha: float = 0.0
+    phi: float = 0.0
+    dphi: float = 0.0
     u: float = 0.0
     y0: float = 0.0
     y1: float = 0.0
@@ -169,8 +169,8 @@ class FurutaPendulumSimulator(BaseSimulator):
         # 7) 可視化用の PublicFurutaState に詰め直す
         theta = getattr(self.state, "theta", 0.0)
         dtheta = getattr(self.state, "dtheta", 0.0)
-        alpha = getattr(self.state, "alpha", 0.0)
-        dalpha = getattr(self.state, "dalpha", 0.0)
+        phi = getattr(self.state, "phi", 0.0)
+        dphi = getattr(self.state, "dphi", 0.0)
 
         if isinstance(y, (list, tuple)) and len(y) >= 2:
             y0, y1 = float(y[0]), float(y[1])
@@ -182,8 +182,8 @@ class FurutaPendulumSimulator(BaseSimulator):
             t=self._t,
             theta=theta,
             dtheta=dtheta,
-            alpha=alpha,
-            dalpha=dalpha,
+            phi=phi,
+            dphi=dphi,
             u=u,
             y0=y0,
             y1=y1,

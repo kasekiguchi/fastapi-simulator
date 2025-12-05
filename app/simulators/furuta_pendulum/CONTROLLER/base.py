@@ -27,16 +27,16 @@ class ControllerParams:
 #    """ for dynamic filter """
 #     theta: float = 0.0
 #     dtheta: float = 0.0
-#     alpha: float = 0.0
-#     dalpha: float = 0.0
+#     phi: float = 0.0
+#     dphi: float = 0.0
 #     @property
 #     def as_array(self) -> np.ndarray:
 #         return np.array(
 #             [
 #                 self.theta,
-#                 self.alpha,
+#                 self.phi,
 #                 self.dtheta,
-#                 self.dalpha
+#                 self.dphi
 #             ])
 
 class CONTROLLER():

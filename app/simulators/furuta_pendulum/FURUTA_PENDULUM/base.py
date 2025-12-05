@@ -20,7 +20,7 @@ class FURUTA_PENDULUM(BaseSimulator):
     """
     MATLAB 版 FURUTA_PENDULUM クラスの Python 実装（簡略版）。
 
-    state = [th, alpha, dth, dalpha]
+    state = [th, phi, dth, dphi]
       th  : アーム角
       al  : 振り子角
       dth : p の微分

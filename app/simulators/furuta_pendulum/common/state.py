@@ -8,18 +8,18 @@ from ...base import SimState
 class FurutaPendulumState(SimState):
     theta: float = 0.0
     dtheta: float = 0.0
-    alpha: float = 0.0
-    dalpha: float = 0.0
+    phi: float = 0.0
+    dphi: float = 0.0
     @property
     def as_array(self) -> np.ndarray:
         return np.array(
             [
                 self.theta,
-                self.alpha,
+                self.phi,
                 self.dtheta,
-                self.dalpha
+                self.dphi
             ])        
     def set(self,state):
-        self.theta, self.alpha, self.dtheta, self.dalpha = state
+        self.theta, self.phi, self.dtheta, self.dphi = state
         return self
         
