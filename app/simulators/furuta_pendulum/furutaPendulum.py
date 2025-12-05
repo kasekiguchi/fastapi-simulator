@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import  Literal,List
 
-from ...simulators.furuta_pendulum.simulator import simulate_furutaPendulum
+from .simulatorOrg import simulate_furutaPendulum
 
 router = APIRouter()
 

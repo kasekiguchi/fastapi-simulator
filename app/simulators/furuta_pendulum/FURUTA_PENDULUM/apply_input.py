@@ -10,7 +10,7 @@ if TYPE_CHECKING:  # 型チェック用
     from .base import FURUTA_PENDULUM
 
 
-def apply_input(self: "FURUTA_PENDULUM", u: float, dt: float) -> None:
+def apply_input(self: "FURUTA_PENDULUM", u: float, dt: float) -> FurutaPendulumState:
     """
     MATLAB:
         cart.apply_input(u, dt)
@@ -44,3 +44,4 @@ def apply_input(self: "FURUTA_PENDULUM", u: float, dt: float) -> None:
     self.TT.append(self.t)
     self.XX.append(self.state.copy())
     self.output = self._H @ self.state
+    return self.state

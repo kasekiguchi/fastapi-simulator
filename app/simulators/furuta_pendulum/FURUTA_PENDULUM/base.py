@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from ...base import BaseSimulator, SimState
+
 from typing import Optional, Sequence
 
 import numpy as np
@@ -10,56 +12,19 @@ from .apply_input import apply_input
 from .measure import measure
 from .ode import ode
 
-
-@dataclass
-class FurutaPendulumParams:
-    """
-    MATLAB コメントに対応:
-    [m1 m2 J jx jy jz L lg Dp Dth gravity a]
-    """
-    m1: float = 0.22
-    m2: float = 0.94
-    J: float = 9.1e-3
-    jx: float = 0.0095
-    jy: float = 0.0095
-    jz: float = 0.00017
-    L: float = 0.21
-    lg: float = 0.35
-    Dp: float = 0.0354
-    Dth: float = 0.026
-    gravity: float = 9.81
-    a: float = 3.61
-
-    @property
-    def as_array(self) -> np.ndarray:
-        return np.array(
-            [
-                self.m1,
-                self.m2,
-                self.J,
-                self.jx,
-                self.jy,
-                self.jz,
-                self.L,
-                self.lg,
-                self.Dp,
-                self.Dth,
-                self.gravity,
-                self.a,
-            ],
-            dtype=float,
-        )
+from ..common.state import FurutaPendulumState
+from ..common.physical_parameters import FurutaPendulumParams
 
 
-class FURUTA_PENDULUM:
+class FURUTA_PENDULUM(BaseSimulator):
     """
     MATLAB 版 FURUTA_PENDULUM クラスの Python 実装（簡略版）。
 
-    state = [p, th, dp, dth]
-      p   : アーム角
-      th  : 振り子角
-      dp  : p の微分
-      dth : th の微分
+    state = [th, alpha, dth, dalpha]
+      th  : アーム角
+      al  : 振り子角
+      dth : p の微分
+      dal : th の微分
     """
 
     def __init__(
@@ -71,6 +36,7 @@ class FURUTA_PENDULUM:
         params: Optional[FurutaPendulumParams] = None,
         dead_zone: float = 0.01,
     ) -> None:
+        self.dt = 0.01
         self.state = np.asarray(initial, dtype=float).copy()  # shape (4,)
         self.sys_noise = sys_noise
 
@@ -108,3 +74,22 @@ class FURUTA_PENDULUM:
     apply_input = apply_input
     measure = measure
     _ode = ode
+    
+    def reset(self) -> None:
+        self.state = FurutaPendulumState()
+
+    def set_params(self, **kwargs) -> None:
+        for k, v in kwargs.items():
+            if hasattr(self.params, k):
+                setattr(self.params, k, float(v))
+
+    def get_params(self):
+        return self.params
+
+    def apply_impulse(self, **kwargs) -> None:
+        """クリックなどでトルクを一時的に加えるイメージ"""
+        torque = float(kwargs.get("torque", 0.1))
+        self.state.u += torque
+
+    def step(self) -> FurutaPendulumState:
+        return self.apply_input(self.state.u,self.dt)

@@ -1,164 +1,190 @@
-# Path: app/furuta_pendulum/simulator.py
-from __future__ import annotations
-
+# app/simulators/furutaPendulum/simulator.py
 from dataclasses import dataclass
-from typing import Literal, TypedDict, List
+from typing import Any, Optional
 
-import numpy as np
-from scipy import signal, linalg
+from ..base import BaseSimulator, SimState
 
-from .FURUTA_PENDULUM import FURUTA_PENDULUM, FurutaPendulumParams
-from .Ac import Ac_furutaPendulum
-from .Bc import Bc_furutaPendulum
+# ここは既存コードに合わせて import
+# from .FURUTA_PENDULUM.base import (
+    # FurutaPlant,      # 制御対象クラス (仮名)
+    # PlantState,       # x を表す dataclass or class
+    # PlantParams,      # 物理パラメータ
+# )
+# from .FURUTA_PENDULUM import apply_input  # x,u,dt -> x_next (仮)
+# from .FURUTA_PENDULUM import measure      # x -> y
+# from .FURUTA_PENDULUM import FURUTA_PENDULUM
+from .FURUTA_PENDULUM import FURUTA_PENDULUM as fp
 
-TimeMode = Literal["discrete", "continuous"]
-EstimatorMode = Literal["EKF", "observer"]
+from .CONTROLLER import (
+    CONTROLLER,
+    # FurutaController,  # 制御器本体 (仮名)
+    # ControllerState,   # z (内部状態)
+    ControllerParams,  # 制御パラメータ
+)
+from .CONTROLLER import calc_input              # u = f(...)
+from .ESTIMATOR import ESTIMATOR        # x̂ 更新 (必要なら)
 
+from .common.state import FurutaPendulumState
+from .common.physical_parameters import FurutaPendulumParams
 
-@dataclass
-# class SimConfig:
-#     init: List[float]
-#     dt: float = 0.01
-#     duration: float = 10.0
-#     time_mode: TimeMode = "discrete"
-#     estimator: EstimatorMode = "observer"
+class PublicFurutaState(SimState):
+    """フロントへ送るための状態（必要な分だけ切り出し）"""
+    theta: float = 0.0
+    dtheta: float = 0.0
+    alpha: float = 0.0
+    dalpha: float = 0.0
+    u: float = 0.0
+    y0: float = 0.0
+    y1: float = 0.0
+    # デバッグ用にぜんぶ投げたいなら Any で持ってもOK（JSON化するとき注意）
+    # raw_x: Any = None
+    # raw_z: Any = None
 
-
-class SimResult(TypedDict):
-    t: List[float]
-    y: List[List[float]]      # [p, th]
-    xhat: List[List[float]]   # 推定状態
-    u: List[float]
-
-
-def dlqr(A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray) -> np.ndarray:
-    P = linalg.solve_discrete_are(A, B, Q, R)
-    BtP = B.T @ P
-    K = np.linalg.inv(BtP @ B + R) @ (BtP @ A)
-    return K
-
-
-def lqr(A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray) -> np.ndarray:
-    P = linalg.solve_continuous_are(A, B, Q, R)
-    BtP = B.T @ P
-    K = np.linalg.inv(B.T @ P @ B + R) @ (B.T @ P @ A)
-    return K
-
-
-def simulate_furutaPendulum(
-    init: List[float],
-    dt: float = 0.01,
-    duration: float = 10.0,
-    time_mode: TimeMode = "discrete",
-    estimator: EstimatorMode = "observer",
-) -> SimResult:
+class FurutaPendulumSimulator(BaseSimulator):
     """
-    MATLAB スクリプトの流れを Python で再現したもの。
+    FURUTA_PENDULUM + CONTROLLER を BaseSimulator に接続するアダプタ。
+    - plant: FURUTA_PENDULUM の制御対象
+    - controller: CONTROLLER 側の制御器
     """
-    # init = init
-    # dt = dt
-    te = duration
-    tspan = np.arange(0.0, te + dt, dt)
 
-    # プラント生成（MATLAB: cart = FURUTA_PENDULUM(init);）
-    cart = FURUTA_PENDULUM(init, params=FurutaPendulumParams())
+    def __init__(self, dt: float = 0.01,
+        plant_params: Optional[FurutaPendulumParams] = None,
+        controller_params: Optional[ControllerParams] = None,
+        initial_state: Optional[FurutaPendulumState] = None,
+        ):
+        # dt
+        self.dt = dt
 
-    # 線形モデル
-    Ac = Ac_furutaPendulum(params=FurutaPendulumParams().as_array)
-    Bc = Bc_furutaPendulum(params=FurutaPendulumParams().as_array)
-    # Bc = np.array([[0], [0], [0], [1]], dtype=float)
-    Cc = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=float)
-    Dc = np.zeros((2, 1))
+        self.plant = fp(plant_params)
+        # --- パラメータ: 渡されなければデフォルトを使う ---
+        
+        if plant_params is None:
+            plant_params = self.plant.get_params()
+        if controller_params is None:
+            controller_params = ControllerParams()
 
-    if Bc.ndim == 1:
-        Bc = Bc.reshape(-1, 1)
-    if Cc.ndim == 1:
-        Cc = Cc.reshape(1, -1)
-    if Dc.ndim == 0:
-        Dc = np.array([[Dc]])
-    if time_mode == "discrete":
-        Ad, Bd, Cd, Dd, _ = signal.cont2discrete((Ac, Bc, Cc, Dc), dt)
-    else:
-        Ad, Bd, Cd, Dd = None, None, None, None
+        # --- 初期状態: 渡されなければゼロ状態などのデフォルト ---
+        if initial_state is None:
+            initial_state = FurutaPendulumState()
+            
+                # 内部に保持
+        self.params: FurutaPendulumParams = plant_params
+        self.state: FurutaPendulumState = initial_state
+        self._t: float = initial_state.t if hasattr(initial_state, "t") else 0.0
 
-    Q_lqr = np.diag([1.0, 100.0, 1.0, 1.0])
-    R_lqr = np.array([[1.0]])
+        # プラント・コントローラ・推定器のインスタンス化（既存コードに合わせて調整）
+        self.ctrl_params: ControllerParams = controller_params
+        self.ctrl = FurutaController(self.ctrl_params)
+        self.ctrl_state: ControllerState = self.ctrl.init_state()
 
-    if time_mode == "discrete":
-        Fd = dlqr(Ad, Bd, Q_lqr, R_lqr)
-        Fod = dlqr(
-            Ad.T,
-            Cd.T,
-            np.diag([1.0, 1.0, 1.0, 1.0]),
-            np.diag([0.01,0.01]),
-        ).T
-        Fc = None
-        Foc = None
-    else:
-        Fc = lqr(Ac, Bc, Q_lqr, R_lqr)
-        Foc = lqr(
-            Ac.T,
-            Cc.T,
-            np.diag([1.0, 1.0, 1.0, 1.0]),
-            np.diag([0.01,0.01]),
-        ).T
-        Fd = None
-        Fod = None
+        self._pending_impulse: float = 0.0  # クリック等で加える追加入力
+        self._last_u: float = 0.0
+        self._last_y: Any = None
+#=================================================
+        # プラント / コントローラの生成
+        params = get_params()            # PlantParams を返す想定
+        self.plant = FurutaPlant(params)         # あるいは PlantState, Params を渡すAPIでもOK
+        self.x: PlantState = self.plant.state    # もしくは self.x = PlantState()
+        self.y: Any = None
 
-    if estimator == "EKF":
-        P = np.eye(4)
-        Qd = 1.0
-        Rd = 0.01 * np.diag([0.02, 0.05])
+        self.estimator = ESTIMATOR(initial_state)
+        self.ctrl_params = ControllerParams()    # ここも既存コードに合わせて
+        self.ctrl = FurutaController(self.ctrl_params)
+        self.z: ControllerState = self.ctrl.state  # 内部状態（オブザーバなど）
 
-    n_steps = len(tspan)
-    T = np.zeros(n_steps)
-    Y = np.zeros((n_steps, 2))
-    Xhat = np.zeros((n_steps, 4))
-    U = np.zeros(n_steps)
+        # 前回入力
+        self.u: float = 0.0
 
-    # 初期測定 & 推定
-    y = cart.measure()
-    xh = np.array([y[0], y[1], 0.0, 0.0])
-    u = 0.0
+        # クリック等で加える追加入力
+        self._pending_impulse: float = 0.0
 
-    for i, t in enumerate(tspan):
-        T[i] = t
+        # 時刻は SimState 側で管理
+        self._t: float = 0.0
 
-        # 測定
-        y = cart.measure()
+    # ===== BaseSimulator インターフェース実装 =====
+    def reset(self) -> None:
+        """状態リセット（パラメータは維持）"""
+        self.state = FurutaPendulumState()
+        self.ctrl_state = self.ctrl.init_state()
+        self._t = 0.0
+        self._pending_impulse = 0.0
+        self._last_u = 0.0
+        self._last_y = None
 
-        # 推定
-        if i > 0:
-            if time_mode == "discrete":
-                if estimator == "EKF":
-                    xh_pre = Ad @ xh + Bd.flatten() * u
-                    P_pre = Ad @ P @ Ad.T + Bd @ (Qd * Bd.T)
-                    Gd = (P_pre @ Cd.T) @ np.linalg.inv(Cd @ P_pre @ Cd.T + Rd)
-                    P = (np.eye(4) - Gd @ Cd) @ P_pre
-                    xh = xh_pre + Gd @ (y - Cd @ xh_pre)
-                else:
-                    xh = Ad @ xh + Bd.flatten() * u - Fod @ (Cd @ xh - y)
-            else:
-                dxh = Ac @ xh + Bc.flatten() * u - Foc @ (Cc @ xh - y)
-                xh = xh + dt * dxh
+    def set_params(self, **kwargs) -> None:
+        """
+        フロントからパラメータを部分的に更新するためのメソッド。
+        例: { "plant_m1": 1.2, "plant_l1": 0.4, "ctrl_kp": 10.0 }
+        """
+        # plant_ で始まるものは物理パラメータへ
+        for k, v in kwargs.items():
+            if k.startswith("plant_"):
+                name = k[len("plant_") :]
+                if hasattr(self.params, name):
+                    setattr(self.params, name, float(v))
 
-        # フィードバック
-        if time_mode == "discrete":
-            u = float(Fd @ (-xh))
+        # ctrl_ で始まるものは制御パラメータへ
+        for k, v in kwargs.items():
+            if k.startswith("ctrl_"):
+                name = k[len("ctrl_") :]
+                if hasattr(self.ctrl_params, name):
+                    setattr(self.ctrl_params, name, float(v))
+
+    def apply_impulse(self, **kwargs) -> None:
+        """クリックなどで瞬間的に入れるトルク（追加入力）"""
+        torque = float(kwargs.get("torque", 0.1))
+        self._pending_impulse += torque
+
+    def step(self) -> PublicFurutaState:
+        dt = self.dt
+
+        # 1) センサ値を取得
+        y = measure(self.state)
+        self._last_y = y
+
+        # 2) 状態推定（必要な場合だけ）
+        try:
+            x_hat, self.ctrl_state = estimate(
+                self.state, y, self._last_u, self.ctrl_state, dt
+            )
+        except NotImplementedError:
+            x_hat = self.state
+
+        # 3) 制御入力 u を計算
+        u = calc_input(x_hat, self.ctrl_params, self.ctrl_state, t=self._t)
+
+        # 4) クリックによる追加入力を加える
+        if self._pending_impulse != 0.0:
+            u += self._pending_impulse
+            self._pending_impulse = 0.0
+
+        self._last_u = u
+
+        # 5) プラントを 1 ステップ進める
+        self.state = apply_input_step(self.state, u, self.params, dt)
+
+        # 6) 時刻更新
+        self._t += dt
+
+        # 7) 可視化用の PublicFurutaState に詰め直す
+        theta = getattr(self.state, "theta", 0.0)
+        dtheta = getattr(self.state, "dtheta", 0.0)
+        alpha = getattr(self.state, "alpha", 0.0)
+        dalpha = getattr(self.state, "dalpha", 0.0)
+
+        if isinstance(y, (list, tuple)) and len(y) >= 2:
+            y0, y1 = float(y[0]), float(y[1])
         else:
-            u = float(Fc @ (-xh))
+            y0 = float(y) if y is not None else 0.0
+            y1 = 0.0
 
-        # プラントを進める
-        cart.apply_input(u, dt)
-
-        # ログ
-        Y[i, :] = y
-        Xhat[i, :] = xh
-        U[i] = u
-
-    return SimResult(
-        t=T.tolist(),
-        y=Y.tolist(),
-        xhat=Xhat.tolist(),
-        u=U.tolist(),
-    )
+        return PublicFurutaState(
+            t=self._t,
+            theta=theta,
+            dtheta=dtheta,
+            alpha=alpha,
+            dalpha=dalpha,
+            u=u,
+            y0=y0,
+            y1=y1,
+        )

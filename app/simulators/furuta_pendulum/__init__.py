@@ -1,5 +1,7 @@
 # Path: app/furuta_pendulum/__init__.py
-from .FURUTA_PENDULUM import FURUTA_PENDULUM, FurutaPendulumParams
-from .simulator import simulate_furutaPendulum
+from .FURUTA_PENDULUM import FURUTA_PENDULUM
+from .simulatorOrg import simulate_furutaPendulum
 
-__all__ = ["FURUTA_PENDULUM", "FurutaPendulumParams", "simulate_furutaPendulum"]
+__all__ = ["FURUTA_PENDULUM", "simulate_furutaPendulum"]
+# app/simulators/furutaPendulum/__init__.py
+from .simulator import FurutaPendulumSimulator  # re-export
