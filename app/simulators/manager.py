@@ -34,6 +34,22 @@ class SimulationManager:
         async with self._lock:
             self.sim.apply_impulse(**kwargs)
 
+    async def reset(self) -> None:
+        async with self._lock:
+            self.sim.reset()
+
+    async def set_poles(self, poles=None, gain=None) -> None:
+        if hasattr(self.sim, "set_poles"):
+            async with self._lock:
+                self.sim.set_poles(poles=poles, gain=gain)
+
+    async def set_exp_mode(self, exp_mode: Optional[bool]) -> None:
+        if exp_mode is None:
+            return
+        if hasattr(self.sim, "set_exp_mode"):
+            async with self._lock:
+                self.sim.set_exp_mode(bool(exp_mode))
+
     async def _loop(self):
         acc = 0.0
         self._stop_event.clear()

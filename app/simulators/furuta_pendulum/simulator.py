@@ -80,6 +80,9 @@ class FurutaPendulumSimulator(BaseSimulator):
         self._pending_impulse: float = 0.0  # クリック等で加える追加入力
         self._last_u: float = 0.0
         self._last_y: Any = None
+        self.exp_mode: bool = False
+        self.poles = []
+        self.gain = []
 #=================================================
         # プラント / コントローラの生成
         params = get_params()            # PlantParams を返す想定
@@ -129,6 +132,12 @@ class FurutaPendulumSimulator(BaseSimulator):
                 name = k[len("ctrl_") :]
                 if hasattr(self.ctrl_params, name):
                     setattr(self.ctrl_params, name, float(v))
+    def set_poles(self, poles=None, gain=None) -> None:
+        self.poles = poles or []
+        self.gain = gain or []
+
+    def set_exp_mode(self, exp_mode: bool) -> None:
+        self.exp_mode = bool(exp_mode)
 
     def apply_impulse(self, **kwargs) -> None:
         """クリックなどで瞬間的に入れるトルク（追加入力）"""

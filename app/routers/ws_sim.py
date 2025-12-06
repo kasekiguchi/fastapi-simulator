@@ -33,7 +33,7 @@ def _attach_broadcast_listener(sim_type: str):
         clients = _clients.get(sim_type)
         if not clients:
             return
-        msg = json.dumps({"type": "state", "payload": _state_to_dict(state)})
+        msg = json.dumps({"type": "state", "state": _state_to_dict(state)})
         for ws in list(clients):
             asyncio.create_task(_safe_send(ws, msg))
 
@@ -67,12 +67,27 @@ async def sim_ws(websocket: WebSocket, sim_type: str):
             payload = msg.get("payload", {})
 
             if msg_type == "click":
-                # SMD: {force}, Furuta: {torque} など
+                # 優先: 直下キー force/torque, 後方互換で payload も見る
+                payload = {}
+                if isinstance(msg.get("payload"), dict):
+                    payload.update(msg["payload"])
+                for k in ("force", "torque"):
+                    if k in msg:
+                        payload[k] = msg[k]
                 await mgr.apply_impulse(**payload)
             elif msg_type == "start":
                 await mgr.start()
             elif msg_type == "stop":
                 await mgr.stop()
+            elif msg_type == "reset":
+                await mgr.reset()
+            elif msg_type == "set_params":
+                params = msg.get("params") or msg.get("payload") or {}
+                await mgr.set_params(**params)
+            elif msg_type == "set_poles":
+                await mgr.set_poles(poles=msg.get("poles"), gain=msg.get("gain"))
+            elif msg_type == "set_exp_mode":
+                await mgr.set_exp_mode(msg.get("expMode"))
 
     except WebSocketDisconnect:
         print(f"[ws_sim] client disconnected: {sim_type}")

@@ -1,0 +1,10 @@
+{
+  "workbench.preferredHighContrastColorTheme": "Visual Studio 2017 Light - C++",
+  "workbench.preferredDarkColorTheme": "Visual Studio Dark",
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#0cf",
+    "titleBar.activeForeground": "#000",
+    "activityBar.activeBackground": "#0cf",
+    "activityBar.foreground": "#000",
+  }
+}
