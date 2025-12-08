@@ -1,5 +1,4 @@
 
-def calc_input(self,xh):
-    # フィードバック
-    self.u = float(self.F @ (-xh))
-    return self.u
+def calc_input(self, xh):
+    """Compatibility shim; delegates to compute()."""
+    return self.compute(xh)

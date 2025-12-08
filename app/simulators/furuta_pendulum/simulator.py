@@ -1,34 +1,21 @@
-# app/simulators/furutaPendulum/simulator.py
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional, List, Dict, Any, Sequence
+
+import numpy as np
 
 from ..base import BaseSimulator, SimState
-
-# ここは既存コードに合わせて import
-# from .FURUTA_PENDULUM.base import (
-    # FurutaPlant,      # 制御対象クラス (仮名)
-    # PlantState,       # x を表す dataclass or class
-    # PlantParams,      # 物理パラメータ
-# )
-# from .FURUTA_PENDULUM import apply_input  # x,u,dt -> x_next (仮)
-# from .FURUTA_PENDULUM import measure      # x -> y
-# from .FURUTA_PENDULUM import FURUTA_PENDULUM
-from .FURUTA_PENDULUM import FURUTA_PENDULUM as fp
-
-from .CONTROLLER import (
-    CONTROLLER,
-    # FurutaController,  # 制御器本体 (仮名)
-    # ControllerState,   # z (内部状態)
-    ControllerParams,  # 制御パラメータ
-)
-from .CONTROLLER import calc_input              # u = f(...)
-from .ESTIMATOR import ESTIMATOR        # x̂ 更新 (必要なら)
-
+from .FURUTA_PENDULUM.base import FURUTA_PENDULUM
 from .common.state import FurutaPendulumState
 from .common.physical_parameters import FurutaPendulumParams
+from .CONTROLLER import CONTROLLER, ControllerParams
+from .CONTROLLER.base import _build_linear_model
+from .ESTIMATOR import ESTIMATOR, EstimatorParams
 
-class PublicFurutaState(SimState):
-    """フロントへ送るための状態（必要な分だけ切り出し）"""
+
+@dataclass
+class PublicFPState(SimState):
+    """フロントへ送るための公開状態"""
+    t: float = 0.0
     theta: float = 0.0
     dtheta: float = 0.0
     phi: float = 0.0
@@ -36,105 +23,112 @@ class PublicFurutaState(SimState):
     u: float = 0.0
     y0: float = 0.0
     y1: float = 0.0
-    # デバッグ用にぜんぶ投げたいなら Any で持ってもOK（JSON化するとき注意）
-    # raw_x: Any = None
-    # raw_z: Any = None
+    closed_loop_poles: Optional[List[Dict[str, float]]] = None
+    feedback_gain: Optional[List[List[float]]] = None
+
 
 class FurutaPendulumSimulator(BaseSimulator):
     """
-    FURUTA_PENDULUM + CONTROLLER を BaseSimulator に接続するアダプタ。
-    - plant: FURUTA_PENDULUM の制御対象
-    - controller: CONTROLLER 側の制御器
+    FURUTA_PENDULUM を BaseSimulator に接続するシンプルなラッパ。
     """
 
-    def __init__(self, dt: float = 0.01,
+    def __init__(
+        self,
+        dt: float = 0.01,
         plant_params: Optional[FurutaPendulumParams] = None,
-        controller_params: Optional[ControllerParams] = None,
         initial_state: Optional[FurutaPendulumState] = None,
-        ):
-        # dt
+    ):
         self.dt = dt
+        self.control_time_mode: str = "discrete"
+        self.estimator_time_mode: str = "discrete"
+        self.params: FurutaPendulumParams = plant_params or FurutaPendulumParams()
 
-        self.plant = fp(plant_params)
-        # --- パラメータ: 渡されなければデフォルトを使う ---
-        
-        if plant_params is None:
-            plant_params = self.plant.get_params()
-        if controller_params is None:
-            controller_params = ControllerParams()
-
-        # --- 初期状態: 渡されなければゼロ状態などのデフォルト ---
         if initial_state is None:
-            initial_state = FurutaPendulumState()
-            
-                # 内部に保持
-        self.params: FurutaPendulumParams = plant_params
-        self.state: FurutaPendulumState = initial_state
-        self._t: float = initial_state.t if hasattr(initial_state, "t") else 0.0
+            self._initial_array: Sequence[float] = [0.0, 0.0, 0.0, 0.0]
+        else:
+            self._initial_array = initial_state.as_array
 
-        # プラント・コントローラ・推定器のインスタンス化（既存コードに合わせて調整）
-        self.ctrl_params: ControllerParams = controller_params
-        self.ctrl = FurutaController(self.ctrl_params)
-        self.ctrl_state: ControllerState = self.ctrl.init_state()
-
-        self._pending_impulse: float = 0.0  # クリック等で加える追加入力
-        self._last_u: float = 0.0
-        self._last_y: Any = None
-        self.exp_mode: bool = False
-        self.poles = []
-        self.gain = []
-#=================================================
-        # プラント / コントローラの生成
-        params = get_params()            # PlantParams を返す想定
-        self.plant = FurutaPlant(params)         # あるいは PlantState, Params を渡すAPIでもOK
-        self.x: PlantState = self.plant.state    # もしくは self.x = PlantState()
-        self.y: Any = None
-
-        self.estimator = ESTIMATOR(initial_state)
-        self.ctrl_params = ControllerParams()    # ここも既存コードに合わせて
-        self.ctrl = FurutaController(self.ctrl_params)
-        self.z: ControllerState = self.ctrl.state  # 内部状態（オブザーバなど）
-
-        # 前回入力
-        self.u: float = 0.0
-
-        # クリック等で加える追加入力
+        self.plant = FURUTA_PENDULUM(initial=self._initial_array, params=self.params)
+        self.state = FurutaPendulumState()
         self._pending_impulse: float = 0.0
+        self.exp_mode: bool = False
+        self.controller: Optional[CONTROLLER] = None
+        self.control_params: Dict[str, Any] = {}
+        self.control_info: Dict[str, Any] = {}
+        self.estimator: Optional[ESTIMATOR] = None
+        self.estimator_params: Dict[str, Any] = {}
+        self._trace: Dict[str, list] = self._empty_trace()
 
-        # 時刻は SimState 側で管理
-        self._t: float = 0.0
-
-    # ===== BaseSimulator インターフェース実装 =====
     def reset(self) -> None:
         """状態リセット（パラメータは維持）"""
-        self.state = FurutaPendulumState()
-        self.ctrl_state = self.ctrl.init_state()
-        self._t = 0.0
         self._pending_impulse = 0.0
-        self._last_u = 0.0
-        self._last_y = None
+        self.plant = FURUTA_PENDULUM(initial=self._initial_array, params=self.params)
+        self.state = FurutaPendulumState()
+        self._trace = self._empty_trace()
+        if self.controller:
+            self.controller.reset()
+        if self.estimator:
+            self.estimator.reset()
+
+    def set_initial(self, initial=None, **kwargs) -> None:
+        """初期状態を設定し直す。initial dict または kwargs で指定。"""
+        if initial is None and kwargs:
+            initial = kwargs
+        if initial is None:
+            return
+        arr = [
+            float(initial.get("theta", 0.0)),
+            float(initial.get("phi", 0.0)),
+            float(initial.get("dtheta", 0.0)),
+            float(initial.get("dphi", 0.0)),
+        ]
+        self._initial_array = arr
+        self.plant = FURUTA_PENDULUM(initial=self._initial_array, params=self.params)
+        self.state = FurutaPendulumState(theta=arr[0], phi=arr[1], dtheta=arr[2], dphi=arr[3])
+        self._trace = self._empty_trace()
 
     def set_params(self, **kwargs) -> None:
-        """
-        フロントからパラメータを部分的に更新するためのメソッド。
-        例: { "plant_m1": 1.2, "plant_l1": 0.4, "ctrl_kp": 10.0 }
-        """
-        # plant_ で始まるものは物理パラメータへ
         for k, v in kwargs.items():
-            if k.startswith("plant_"):
-                name = k[len("plant_") :]
-                if hasattr(self.params, name):
-                    setattr(self.params, name, float(v))
+            if hasattr(self.params, k):
+                setattr(self.params, k, float(v))
+        # FURUTA_PENDULUM が参照するパラメータも更新
+        self.plant.params = self.params
+        self.plant.plant_param = self.params.as_array
+        if self.controller:
+            self.controller.set_params(**kwargs)
+            self.control_info = self._compute_control_info()
+        if self.estimator:
+            self.estimator.set_params(**kwargs)
 
-        # ctrl_ で始まるものは制御パラメータへ
-        for k, v in kwargs.items():
-            if k.startswith("ctrl_"):
-                name = k[len("ctrl_") :]
-                if hasattr(self.ctrl_params, name):
-                    setattr(self.ctrl_params, name, float(v))
-    def set_poles(self, poles=None, gain=None) -> None:
-        self.poles = poles or []
-        self.gain = gain or []
+    def set_control_params(self, control_params: Optional[Dict[str, Any]] = None) -> None:
+        """制御器を選択し、パラメータを設定する。"""
+        if not control_params or "type" not in control_params:
+            self.controller = None
+            self.control_params = {}
+            self.control_info = {}
+            return
+
+        self.control_params = control_params
+        tm = control_params.get("time_mode") or control_params.get("timeMode") or self.control_time_mode
+        self.control_time_mode = tm
+        settings = ControllerParams(time_mode=tm, dt=self.dt)
+        self.controller = CONTROLLER(parameters=self.params, settings=settings, dt=self.dt)
+        self.controller.set_control_params(control_params)
+        self.control_info = self._compute_control_info()
+
+    def set_estimator_params(self, estimator_params: Optional[Dict[str, Any]] = None) -> None:
+        """Estimator を選択し、パラメータを設定する。"""
+        if not estimator_params or "type" not in estimator_params:
+            self.estimator = None
+            self.estimator_params = {}
+            return
+
+        self.estimator_params = estimator_params
+        tm = estimator_params.get("time_mode") or estimator_params.get("timeMode") or self.estimator_time_mode
+        self.estimator_time_mode = tm
+        settings = EstimatorParams(time_mode=tm, dt=self.dt)
+        self.estimator = ESTIMATOR(parameters=self.params, settings=settings, dt=self.dt)
+        self.estimator.set_estimator_params(estimator_params)
 
     def set_exp_mode(self, exp_mode: bool) -> None:
         self.exp_mode = bool(exp_mode)
@@ -144,51 +138,64 @@ class FurutaPendulumSimulator(BaseSimulator):
         torque = float(kwargs.get("torque", 0.1))
         self._pending_impulse += torque
 
-    def step(self) -> PublicFurutaState:
-        dt = self.dt
+    def step(self) -> PublicFPState:
+        # 制御器があれば状態から入力を計算
+        u_ctrl = 0.0
+        if self.controller:
+            try:
+                u_ctrl = float(self.controller.compute(self.plant.state))
+            except Exception:
+                u_ctrl = 0.0
 
-        # 1) センサ値を取得
-        y = measure(self.state)
-        self._last_y = y
+        # クリック等で加える追加入力
+        u = u_ctrl + self._pending_impulse
+        # クリック入力は1ステップ分のみ有効
+        self._pending_impulse = 0.0
 
-        # 2) 状態推定（必要な場合だけ）
-        try:
-            x_hat, self.ctrl_state = estimate(
-                self.state, y, self._last_u, self.ctrl_state, dt
-            )
-        except NotImplementedError:
-            x_hat = self.state
+        # プラントを進める
+        plant_state = self.plant.apply_input(u, self.dt)
+        measurement = self.plant.measure()
+        theta = float(plant_state[0]) if len(plant_state) > 0 else 0.0
+        phi = float(plant_state[1]) if len(plant_state) > 1 else 0.0
+        dtheta = float(plant_state[2]) if len(plant_state) > 2 else 0.0
+        dphi = float(plant_state[3]) if len(plant_state) > 3 else 0.0
 
-        # 3) 制御入力 u を計算
-        u = calc_input(x_hat, self.ctrl_params, self.ctrl_state, t=self._t)
+        y0 = float(measurement[0]) if len(measurement) >= 1 else 0.0
+        y1 = float(measurement[1]) if len(measurement) >= 2 else 0.0
 
-        # 4) クリックによる追加入力を加える
-        if self._pending_impulse != 0.0:
-            u += self._pending_impulse
-            self._pending_impulse = 0.0
-
-        self._last_u = u
-
-        # 5) プラントを 1 ステップ進める
-        self.state = apply_input_step(self.state, u, self.params, dt)
-
-        # 6) 時刻更新
-        self._t += dt
-
-        # 7) 可視化用の PublicFurutaState に詰め直す
-        theta = getattr(self.state, "theta", 0.0)
-        dtheta = getattr(self.state, "dtheta", 0.0)
-        phi = getattr(self.state, "phi", 0.0)
-        dphi = getattr(self.state, "dphi", 0.0)
-
-        if isinstance(y, (list, tuple)) and len(y) >= 2:
-            y0, y1 = float(y[0]), float(y[1])
+        if self.estimator:
+            try:
+                est_state = self.estimator.estimate(u, measurement)
+            except Exception:
+                est_state = None
         else:
-            y0 = float(y) if y is not None else 0.0
-            y1 = 0.0
+            est_state = None
 
-        return PublicFurutaState(
-            t=self._t,
+        # Trace logging
+        self._trace["t"].append(self.plant.t)
+        self._trace["theta"].append(theta)
+        self._trace["phi"].append(phi)
+        self._trace["dtheta"].append(dtheta)
+        self._trace["dphi"].append(dphi)
+        self._trace["u"].append(u)
+        self._trace["y0"].append(y0)
+        self._trace["y1"].append(y1)
+        if est_state is not None and hasattr(est_state, "as_array"):
+            xh = np.asarray(est_state.as_array, dtype=float).flatten()
+            self._trace["xh"].append(xh.tolist())
+        else:
+            self._trace["xh"].append(None)
+
+        theta = float(plant_state[0]) if len(plant_state) > 0 else 0.0
+        phi = float(plant_state[1]) if len(plant_state) > 1 else 0.0
+        dtheta = float(plant_state[2]) if len(plant_state) > 2 else 0.0
+        dphi = float(plant_state[3]) if len(plant_state) > 3 else 0.0
+
+        y0 = float(measurement[0]) if len(measurement) >= 1 else 0.0
+        y1 = float(measurement[1]) if len(measurement) >= 2 else 0.0
+
+        return PublicFPState(
+            t=self.plant.t,
             theta=theta,
             dtheta=dtheta,
             phi=phi,
@@ -196,4 +203,118 @@ class FurutaPendulumSimulator(BaseSimulator):
             u=u,
             y0=y0,
             y1=y1,
+            closed_loop_poles=self.control_info.get("closed_loop_poles"),
+            feedback_gain=self.control_info.get("feedback_gain"),
         )
+
+    def get_public_state(self) -> PublicFPState:
+        """現在のプラント状態を返す（ステップを進めない）。"""
+        plant_state = self.plant.state
+        measurement = self.plant.measure()
+
+        theta = float(plant_state[0]) if len(plant_state) > 0 else 0.0
+        phi = float(plant_state[1]) if len(plant_state) > 1 else 0.0
+        dtheta = float(plant_state[2]) if len(plant_state) > 2 else 0.0
+        dphi = float(plant_state[3]) if len(plant_state) > 3 else 0.0
+
+        y0 = float(measurement[0]) if len(measurement) >= 1 else 0.0
+        y1 = float(measurement[1]) if len(measurement) >= 2 else 0.0
+
+        return PublicFPState(
+            t=self.plant.t,
+            theta=theta,
+            dtheta=dtheta,
+            phi=phi,
+            dphi=dphi,
+            u=self._pending_impulse,
+            y0=y0,
+            y1=y1,
+            closed_loop_poles=self.control_info.get("closed_loop_poles"),
+            feedback_gain=self.control_info.get("feedback_gain"),
+        )
+
+    def get_trace(self) -> Dict[str, Any]:
+        """Return accumulated simulation trace."""
+        return {k: v.copy() for k, v in self._trace.items()}
+
+    def _compute_control_info(self) -> Dict[str, Any]:
+        """Compute diagnostic info (closed-loop poles or gain) for UI."""
+        info: Dict[str, Any] = {}
+        if not self.controller or not getattr(self.controller, "strategy", None):
+            return info
+
+        ctype = self.control_params.get("type")
+        strat = self.controller.strategy
+
+        # Prefer the model inside the strategy if available
+        Ad = getattr(strat, "Ad", None)
+        Bd = getattr(strat, "Bd", None)
+        if Ad is None or Bd is None:
+            try:
+                _, _, Ad, Bd = _build_linear_model(self.params, self.dt)[0:4]
+            except Exception:
+                Ad, Bd = None, None
+
+        # Handle pole assignment: expose gain and closed-loop poles if possible
+        if ctype == "pole_assignment" and hasattr(strat, "K"):
+            try:
+                K = np.asarray(strat.K, dtype=float)
+                info["feedback_gain"] = K.tolist()
+            except Exception:
+                info["feedback_gain"] = None
+                K = None
+            if hasattr(strat, "design_error") and strat.design_error:
+                info["design_error"] = strat.design_error
+            if Ad is not None and Bd is not None and K is not None:
+                try:
+                    Acl = Ad - Bd @ K
+                    eigvals = np.linalg.eigvals(Acl)
+                    info["closed_loop_poles"] = [
+                        {"re": float(ev.real), "im": float(ev.imag)} for ev in eigvals
+                    ]
+                except Exception:
+                    info["closed_loop_poles"] = None
+            return info
+
+        # For LQR / state_feedback, expose closed-loop poles
+        if ctype in ("lqr", "state_feedback") and (hasattr(strat, "gain") or hasattr(strat, "K")):
+            # Get gain as 2D matrix
+            K = None
+            if hasattr(strat, "K"):
+                try:
+                    K = np.asarray(strat.K, dtype=float)
+                except Exception:
+                    K = None
+            if K is None and hasattr(strat, "gain"):
+                try:
+                    g = np.asarray(strat.gain, dtype=float).flatten()
+                    K = g.reshape(1, -1)
+                except Exception:
+                    K = None
+
+            if Ad is None or Bd is None or K is None:
+                return info
+
+            try:
+                Acl = Ad - Bd @ K
+                eigvals = np.linalg.eigvals(Acl)
+                info["closed_loop_poles"] = [
+                    {"re": float(ev.real), "im": float(ev.imag)} for ev in eigvals
+                ]
+            except Exception:
+                info["closed_loop_poles"] = None
+        return info
+
+    @staticmethod
+    def _empty_trace() -> Dict[str, list]:
+        return {
+            "t": [],
+            "theta": [],
+            "phi": [],
+            "dtheta": [],
+            "dphi": [],
+            "u": [],
+            "y0": [],
+            "y1": [],
+            "xh": [],
+        }

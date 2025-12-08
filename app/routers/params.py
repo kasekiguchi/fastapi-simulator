@@ -35,7 +35,7 @@ async def stop_sim(sim_type: str):
     try:
         mgr = get_manager(sim_type)
     except ValueError:
-        raise HTTPException(status_code=404, detail="Unknown simulator")
+        raise HTTPException(status_code=405, detail="Unknown simulator")
     await mgr.stop()
     return {"status": "stopped", "sim_type": sim_type}
 
@@ -45,8 +45,8 @@ async def update_params(sim_type: str, body: ParamsRequest):
     try:
         mgr = get_manager(sim_type)
     except ValueError:
-        raise HTTPException(status_code=404, detail="Unknown simulator")
+        raise HTTPException(status_code=406, detail="Unknown simulator")
 
-    kwargs = {k: v for k, v in body.dict().items() if v is not None}
+    kwargs = {k: v for k, v in body.model_dump().items() if v is not None}
     await mgr.set_params(**kwargs)
     return {"status": "ok", "sim_type": sim_type}

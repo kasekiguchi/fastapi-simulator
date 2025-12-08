@@ -34,14 +34,37 @@ class SimulationManager:
         async with self._lock:
             self.sim.apply_impulse(**kwargs)
 
+    async def set_initial(self, **kwargs) -> None:
+        if hasattr(self.sim, "set_initial"):
+            async with self._lock:
+                self.sim.set_initial(**kwargs)
+
     async def reset(self) -> None:
         async with self._lock:
             self.sim.reset()
+            # After reset, broadcast t=0 state if available
+            state = None
+            getter = getattr(self.sim, "get_public_state", None)
+            if callable(getter):
+                try:
+                    state = getter()
+                except Exception:
+                    state = None
+            if state:
+                for listener in self._listeners:
+                    try:
+                        listener(state)
+                    except Exception as e:
+                        print("[SimulationManager] listener error on reset:", e)
 
-    async def set_poles(self, poles=None, gain=None) -> None:
-        if hasattr(self.sim, "set_poles"):
+    async def set_control_params(self, control_params=None) -> None:
+        if hasattr(self.sim, "set_control_params"):
             async with self._lock:
-                self.sim.set_poles(poles=poles, gain=gain)
+                self.sim.set_control_params(control_params=control_params)
+    async def set_estimator_params(self, estimator_params=None) -> None:
+        if hasattr(self.sim, "set_estimator_params"):
+            async with self._lock:
+                self.sim.set_estimator_params(estimator_params=estimator_params)
 
     async def set_exp_mode(self, exp_mode: Optional[bool]) -> None:
         if exp_mode is None:
@@ -50,24 +73,42 @@ class SimulationManager:
             async with self._lock:
                 self.sim.set_exp_mode(bool(exp_mode))
 
+    async def get_trace(self):
+        """Return aggregated simulation trace if available."""
+        getter = getattr(self.sim, "get_trace", None)
+        if not callable(getter):
+            return None
+        async with self._lock:
+            try:
+                return getter()
+            except Exception:
+                return None
+
     async def _loop(self):
         acc = 0.0
         self._stop_event.clear()
-
-        while not self._stop_event.is_set():
-            async with self._lock:
-                state = self.sim.step()
-
-            acc += self.sim.dt
-            if acc >= self.dt_broadcast:
-                for listener in self._listeners:
+        try:
+            while not self._stop_event.is_set():
+                async with self._lock:
                     try:
-                        listener(state)
+                        state = self.sim.step()
                     except Exception as e:
-                        print("[SimulationManager] listener error:", e)
-                acc = 0.0
+                        print("[SimulationManager] step error:", e)
+                        state = None
 
-            await asyncio.sleep(self.sim.dt)
+                acc += self.sim.dt
+                if acc >= self.dt_broadcast and state is not None:
+                    for listener in self._listeners:
+                        try:
+                            listener(state)
+                        except Exception as e:
+                            print("[SimulationManager] listener error:", e)
+                    acc = 0.0
+
+                await asyncio.sleep(self.sim.dt)
+        except Exception as loop_err:
+            print("[SimulationManager] loop abort:", loop_err)
+            raise
 
     async def start(self):
         if self._task and not self._task.done():

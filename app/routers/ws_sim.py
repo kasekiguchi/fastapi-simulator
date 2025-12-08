@@ -7,6 +7,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 
 from ..runtime import get_manager
 from ..simulators.base import SimState
+import logging
+from ..simulators import SIM_REGISTRY 
+
+logger = logging.getLogger("ws_sim")
 
 router = APIRouter(tags=["ws"])
 
@@ -14,9 +18,9 @@ router = APIRouter(tags=["ws"])
 _clients: Dict[str, Set[WebSocket]] = {}
 
 
-def _state_to_dict(state: SimState) -> dict:
+def _simstate_to_dict(simState: SimState) -> dict:
     # dataclass をそのまま dict に
-    return state.__dict__.copy()
+    return simState.__dict__.copy()
 
 
 async def _safe_send(ws: WebSocket, text: str):
@@ -33,7 +37,8 @@ def _attach_broadcast_listener(sim_type: str):
         clients = _clients.get(sim_type)
         if not clients:
             return
-        msg = json.dumps({"type": "state", "state": _state_to_dict(state)})
+        msg = json.dumps({"type": "state", "payload": _simstate_to_dict(state)})
+        print(f"[ws_sim] send {sim_type}: {msg}")
         for ws in list(clients):
             asyncio.create_task(_safe_send(ws, msg))
 
@@ -42,15 +47,18 @@ def _attach_broadcast_listener(sim_type: str):
 
 @router.websocket("/ws/{sim_type}")
 async def sim_ws(websocket: WebSocket, sim_type: str):
+    print(f"[ws_sim] connect sim_type={sim_type}")
     try:
         mgr = get_manager(sim_type)
-    except ValueError:
+    except ValueError as e:
+        print(f"[ws_sim] {e} unknown sim_type={sim_type}, registry={list(SIM_REGISTRY.keys())}")
         await websocket.accept()
         await websocket.close(code=1003)
-        raise HTTPException(status_code=404, detail="Unknown simulator")
+        # raise HTTPException(status_code=404, detail="Unknown simulator")
+        return 
 
     await websocket.accept()
-
+    logger.info("connected %s from %s", sim_type, websocket.client)
     sim_type = sim_type.lower()
     if sim_type not in _clients:
         _clients[sim_type] = set()
@@ -63,6 +71,8 @@ async def sim_ws(websocket: WebSocket, sim_type: str):
         while True:
             text = await websocket.receive_text()
             msg = json.loads(text)
+            logger.info("recv %s: %s", sim_type, msg)  # ここで丸ごと出力
+            print(f"[ws_sim] recv {sim_type}: {msg}")
             msg_type = msg.get("type")
             payload = msg.get("payload", {})
 
@@ -79,17 +89,29 @@ async def sim_ws(websocket: WebSocket, sim_type: str):
                 await mgr.start()
             elif msg_type == "stop":
                 await mgr.stop()
+                trace = await mgr.get_trace()
+                if trace is not None:
+                    await _safe_send(websocket, json.dumps({"type": "trace", "payload": trace}))
             elif msg_type == "reset":
                 await mgr.reset()
+            elif msg_type == "set_initial":
+                initial = msg.get("initial") or msg.get("payload") or msg
+                await mgr.set_initial(**(initial if isinstance(initial, dict) else {}))
             elif msg_type == "set_params":
                 params = msg.get("params") or msg.get("payload") or {}
                 await mgr.set_params(**params)
-            elif msg_type == "set_poles":
-                await mgr.set_poles(poles=msg.get("poles"), gain=msg.get("gain"))
+            elif msg_type == "set_control_params":
+                control_params = msg.get("control_params") or msg.get("payload") or msg
+                await mgr.set_control_params(control_params=control_params)
+            elif msg_type == "set_estimator_params":
+                estimator_params = msg.get("estimator_params") or msg.get("payload") or msg
+                if hasattr(mgr, "set_estimator_params"):
+                    await mgr.set_estimator_params(estimator_params=estimator_params)
             elif msg_type == "set_exp_mode":
                 await mgr.set_exp_mode(msg.get("expMode"))
 
     except WebSocketDisconnect:
         print(f"[ws_sim] client disconnected: {sim_type}")
+        logger.info("disconnected %s", sim_type)
     finally:
         _clients[sim_type].discard(websocket)

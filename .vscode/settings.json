@@ -6,5 +6,6 @@
     "titleBar.activeForeground": "#000",
     "activityBar.activeBackground": "#0cf",
     "activityBar.foreground": "#000",
-  }
+  },
+  "sandbox_mode": "workspace-write",
 }

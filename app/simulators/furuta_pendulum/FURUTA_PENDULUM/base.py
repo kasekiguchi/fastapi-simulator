@@ -1,9 +1,6 @@
-# Path: app/furuta_pendulum/FURUTA_PENDULUM/base.py
 from __future__ import annotations
 
 from dataclasses import dataclass
-from ...base import BaseSimulator, SimState
-
 from typing import Optional, Sequence
 
 import numpy as np
@@ -14,6 +11,7 @@ from .ode import ode
 
 from ..common.state import FurutaPendulumState
 from ..common.physical_parameters import FurutaPendulumParams
+from ...base import BaseSimulator, SimState
 
 
 class FURUTA_PENDULUM(BaseSimulator):
@@ -29,7 +27,7 @@ class FURUTA_PENDULUM(BaseSimulator):
 
     def __init__(
         self,
-        initial: Sequence[float],
+        initial: Optional[Sequence[float]] = None,
         *,
         sys_noise: float = 1e-5,
         measure_noise: Optional[Sequence[float]] = None,
@@ -37,6 +35,8 @@ class FURUTA_PENDULUM(BaseSimulator):
         dead_zone: float = 0.01,
     ) -> None:
         self.dt = 0.01
+        if initial is None:
+            initial = [0.0, 0.0, 0.0, 0.0]
         self.state = np.asarray(initial, dtype=float).copy()  # shape (4,)
         self.sys_noise = sys_noise
 
@@ -74,7 +74,7 @@ class FURUTA_PENDULUM(BaseSimulator):
     apply_input = apply_input
     measure = measure
     _ode = ode
-    
+
     def reset(self) -> None:
         self.state = FurutaPendulumState()
 
@@ -92,4 +92,4 @@ class FURUTA_PENDULUM(BaseSimulator):
         self.state.u += torque
 
     def step(self) -> FurutaPendulumState:
-        return self.apply_input(self.state.u,self.dt)
+        return self.apply_input(self.state.u, self.dt)
