@@ -38,7 +38,7 @@ def _attach_broadcast_listener(sim_type: str):
         if not clients:
             return
         msg = json.dumps({"type": "state", "payload": _simstate_to_dict(state)})
-        print(f"[ws_sim] send {sim_type}: {msg}")
+        # print(f"[ws_sim] send {sim_type}: {msg.payload}")
         for ws in list(clients):
             asyncio.create_task(_safe_send(ws, msg))
 

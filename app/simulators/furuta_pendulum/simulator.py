@@ -8,8 +8,8 @@ from .FURUTA_PENDULUM.base import FURUTA_PENDULUM
 from .common.state import FurutaPendulumState
 from .common.physical_parameters import FurutaPendulumParams
 from .CONTROLLER import CONTROLLER, ControllerParams
-from .CONTROLLER.base import _build_linear_model
 from .ESTIMATOR import ESTIMATOR, EstimatorParams
+from ..common.linear_utils import build_linear_model
 
 
 @dataclass
@@ -25,6 +25,7 @@ class PublicFPState(SimState):
     y1: float = 0.0
     closed_loop_poles: Optional[List[Dict[str, float]]] = None
     feedback_gain: Optional[List[List[float]]] = None
+    design_error: Optional[str] = None
 
 
 class FurutaPendulumSimulator(BaseSimulator):
@@ -57,6 +58,8 @@ class FurutaPendulumSimulator(BaseSimulator):
         self.control_info: Dict[str, Any] = {}
         self.estimator: Optional[ESTIMATOR] = None
         self.estimator_params: Dict[str, Any] = {}
+        self._est_state: Optional[Any] = None
+        self._last_u: float = 0.0
         self._trace: Dict[str, list] = self._empty_trace()
 
     def reset(self) -> None:
@@ -65,6 +68,8 @@ class FurutaPendulumSimulator(BaseSimulator):
         self.plant = FURUTA_PENDULUM(initial=self._initial_array, params=self.params)
         self.state = FurutaPendulumState()
         self._trace = self._empty_trace()
+        self._est_state = None
+        self._last_u = 0.0
         if self.controller:
             self.controller.reset()
         if self.estimator:
@@ -86,6 +91,8 @@ class FurutaPendulumSimulator(BaseSimulator):
         self.plant = FURUTA_PENDULUM(initial=self._initial_array, params=self.params)
         self.state = FurutaPendulumState(theta=arr[0], phi=arr[1], dtheta=arr[2], dphi=arr[3])
         self._trace = self._empty_trace()
+        self._est_state = None
+        self._last_u = 0.0
 
     def set_params(self, **kwargs) -> None:
         for k, v in kwargs.items():
@@ -135,15 +142,33 @@ class FurutaPendulumSimulator(BaseSimulator):
 
     def apply_impulse(self, **kwargs) -> None:
         """クリックなどで瞬間的に入れるトルク（追加入力）"""
-        torque = float(kwargs.get("torque", 0.1))
+        torque = kwargs.get("torque", kwargs.get("force", 0.1))
+        try:
+            torque = float(torque)
+        except Exception:
+            torque = 0.0
         self._pending_impulse += torque
 
     def step(self) -> PublicFPState:
-        # 制御器があれば状態から入力を計算
+        # 最新計測で推定更新（制御に推定値を使う）
+        measurement = self.plant.measure()
+        if self.estimator:
+            try:
+                est_state = self.estimator.estimate(self._last_u, measurement)
+            except Exception:
+                est_state = None
+            if est_state is None:
+                est_state = self._est_state if self._est_state is not None else self.plant.state
+        # else:
+        #     est_state = self.plant.state
+        self._est_state = est_state
+        print(f"{est_state}===============")
+        # 制御器があれば推定状態から入力を計算
         u_ctrl = 0.0
         if self.controller:
+            ctrl_state = self._est_state if (self._est_state is not None and not getattr(self.estimator, "passthrough", False))            else self.plant.state
             try:
-                u_ctrl = float(self.controller.compute(self.plant.state))
+                u_ctrl = float(self.controller.compute(ctrl_state))
             except Exception:
                 u_ctrl = 0.0
 
@@ -151,10 +176,22 @@ class FurutaPendulumSimulator(BaseSimulator):
         u = u_ctrl + self._pending_impulse
         # クリック入力は1ステップ分のみ有効
         self._pending_impulse = 0.0
+        if not np.isfinite(u):
+            u = 0.0
+        u = float(np.clip(u, -1e3, 1e3))  # 入力暴走の簡易ガード
 
         # プラントを進める
-        plant_state = self.plant.apply_input(u, self.dt)
-        measurement = self.plant.measure()
+        try:
+            plant_state = self.plant.apply_input(u, self.dt)
+        except Exception as e:
+            print("[FurutaPendulumSimulator] apply_input error:", e)
+            plant_state = self.plant.state
+        try:
+            measurement = self.plant.measure()
+        except Exception as e:
+            print("[FurutaPendulumSimulator] measure error:", e)
+            measurement = np.zeros(2)
+        self._last_u = u
         theta = float(plant_state[0]) if len(plant_state) > 0 else 0.0
         phi = float(plant_state[1]) if len(plant_state) > 1 else 0.0
         dtheta = float(plant_state[2]) if len(plant_state) > 2 else 0.0
@@ -168,8 +205,12 @@ class FurutaPendulumSimulator(BaseSimulator):
                 est_state = self.estimator.estimate(u, measurement)
             except Exception:
                 est_state = None
+            # Passthrough or failed estimate -> fall back to previous estimate or true state
+            if est_state is None:
+                est_state = self._est_state if self._est_state is not None else self.plant.state
         else:
-            est_state = None
+            est_state = self.plant.state
+        self._est_state = est_state
 
         # Trace logging
         self._trace["t"].append(self.plant.t)
@@ -180,9 +221,13 @@ class FurutaPendulumSimulator(BaseSimulator):
         self._trace["u"].append(u)
         self._trace["y0"].append(y0)
         self._trace["y1"].append(y1)
-        if est_state is not None and hasattr(est_state, "as_array"):
-            xh = np.asarray(est_state.as_array, dtype=float).flatten()
+        if est_state is not None:
+            if hasattr(est_state, "as_array"):
+                xh = np.asarray(est_state.as_array, dtype=float).flatten()
+            else:
+                xh = np.asarray(est_state, dtype=float).flatten()
             self._trace["xh"].append(xh.tolist())
+            print(f"==================={xh}")
         else:
             self._trace["xh"].append(None)
 
@@ -205,6 +250,7 @@ class FurutaPendulumSimulator(BaseSimulator):
             y1=y1,
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
             feedback_gain=self.control_info.get("feedback_gain"),
+            design_error=self.control_info.get("design_error"),
         )
 
     def get_public_state(self) -> PublicFPState:
@@ -231,11 +277,14 @@ class FurutaPendulumSimulator(BaseSimulator):
             y1=y1,
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
             feedback_gain=self.control_info.get("feedback_gain"),
+            design_error=self.control_info.get("design_error"),
         )
 
     def get_trace(self) -> Dict[str, Any]:
         """Return accumulated simulation trace."""
-        return {k: v.copy() for k, v in self._trace.items()}
+        trace = {k: v.copy() for k, v in self._trace.items()}
+        trace["plot_order"] = ["theta", "phi", "dtheta", "dphi", "xh"]
+        return trace
 
     def _compute_control_info(self) -> Dict[str, Any]:
         """Compute diagnostic info (closed-loop poles or gain) for UI."""
@@ -251,7 +300,12 @@ class FurutaPendulumSimulator(BaseSimulator):
         Bd = getattr(strat, "Bd", None)
         if Ad is None or Bd is None:
             try:
-                _, _, Ad, Bd = _build_linear_model(self.params, self.dt)[0:4]
+                _, _, Ad, Bd = build_linear_model(
+                    lambda: (self.controller.matrices_fn(self.params)),  # type: ignore[attr-defined]
+                    self.dt,
+                    getattr(self.controller, "time_mode", "discrete"),
+                    include_output=False,
+                )
             except Exception:
                 Ad, Bd = None, None
 
