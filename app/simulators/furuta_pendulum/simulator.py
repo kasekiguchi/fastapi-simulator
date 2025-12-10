@@ -114,9 +114,9 @@ class FurutaPendulumSimulator(BaseSimulator):
             self.control_params = {}
             self.control_info = {}
             return
-
+        tm = control_params.get("timeMode") or control_params.get("time_mode") or self.control_time_mode
+        control_params = {**control_params, "timeMode": tm, "time_mode": tm}
         self.control_params = control_params
-        tm = control_params.get("time_mode") or control_params.get("timeMode") or self.control_time_mode
         self.control_time_mode = tm
         settings = ControllerParams(time_mode=tm, dt=self.dt)
         self.controller = CONTROLLER(parameters=self.params, settings=settings, dt=self.dt)
@@ -129,9 +129,9 @@ class FurutaPendulumSimulator(BaseSimulator):
             self.estimator = None
             self.estimator_params = {}
             return
-
+        tm = estimator_params.get("timeMode") or estimator_params.get("time_mode") or self.estimator_time_mode
+        estimator_params = {**estimator_params, "timeMode": tm, "time_mode": tm}
         self.estimator_params = estimator_params
-        tm = estimator_params.get("time_mode") or estimator_params.get("timeMode") or self.estimator_time_mode
         self.estimator_time_mode = tm
         settings = EstimatorParams(time_mode=tm, dt=self.dt)
         self.estimator = ESTIMATOR(parameters=self.params, settings=settings, dt=self.dt)

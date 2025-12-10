@@ -59,7 +59,8 @@ class GenericEstimator:
             self.strategy = None
             self.passthrough = False
             return
-        tm = estimator_params.get("time_mode") or estimator_params.get("timeMode") or self.time_mode
+        tm = estimator_params.get("timeMode") or estimator_params.get("time_mode") or self.time_mode
+        estimator_params = {**estimator_params, "timeMode": tm, "time_mode": tm}
         self.time_mode = tm
         etype = estimator_params.get("type")
         if etype == "none":

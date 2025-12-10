@@ -57,7 +57,8 @@ class GenericController:
         if not control_params or "type" not in control_params:
             self.strategy = None
             return
-        tm = control_params.get("time_mode") or control_params.get("timeMode") or self.time_mode
+        tm = control_params.get("timeMode") or control_params.get("time_mode") or self.time_mode
+        control_params = {**control_params, "timeMode": tm, "time_mode": tm}
         self.time_mode = tm
         ctype = control_params.get("type")
         if ctype == "pole_assignment":

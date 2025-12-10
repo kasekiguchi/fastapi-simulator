@@ -23,6 +23,18 @@ def _simstate_to_dict(simState: SimState) -> dict:
     return simState.__dict__.copy()
 
 
+def _ensure_time_mode(params: dict, src: dict) -> dict:
+    """Inject time mode aliases into params if present in either dict."""
+    if not isinstance(params, dict):
+        return params
+    tm = params.get("timeMode") or params.get("time_mode") or src.get("time_mode") or src.get("timeMode")
+    if tm is None:
+        return params
+    if params.get("timeMode") == tm and params.get("time_mode") == tm:
+        return params
+    return {**params, "timeMode": tm, "time_mode": tm}
+
+
 async def _safe_send(ws: WebSocket, text: str):
     try:
         await ws.send_text(text)
@@ -102,9 +114,11 @@ async def sim_ws(websocket: WebSocket, sim_type: str):
                 await mgr.set_params(**params)
             elif msg_type == "set_control_params":
                 control_params = msg.get("control_params") or msg.get("payload") or msg
+                control_params = _ensure_time_mode(control_params, msg)
                 await mgr.set_control_params(control_params=control_params)
             elif msg_type == "set_estimator_params":
                 estimator_params = msg.get("estimator_params") or msg.get("payload") or msg
+                estimator_params = _ensure_time_mode(estimator_params, msg)
                 if hasattr(mgr, "set_estimator_params"):
                     await mgr.set_estimator_params(estimator_params=estimator_params)
             elif msg_type == "set_exp_mode":
