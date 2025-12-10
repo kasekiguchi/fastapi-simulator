@@ -30,28 +30,39 @@ class FURUTA_PENDULUM(BaseSimulator):
         initial: Optional[Sequence[float]] = None,
         *,
         sys_noise: float = 1e-5,
-        measure_noise: Optional[Sequence[float]] = None,
+        # measure_noise: Optional[Sequence[float]] = None,
+        measure_noise: float = 1e-3,
         params: Optional[FurutaPendulumParams] = None,
-        dead_zone: float = 0.01,
+        dead_zone: float = 0.005,
+        exp_mode: bool = False,
+        param_delta: Optional[Sequence[float]] = None,
     ) -> None:
         self.dt = 0.01
         if initial is None:
             initial = [0.0, 0.0, 0.0, 0.0]
         self.state = np.asarray(initial, dtype=float).copy()  # shape (4,)
-        self.sys_noise = sys_noise
+        self._exp_sys_noise = float(sys_noise)
 
         if measure_noise is None:
             # MATLAB: 0.001*[0.005; 2*pi/(2*360)]
-            self.measure_noise = 0.001 * np.array(
+            self._exp_measure_noise = 0.01 * np.array(
                 [0.005, 2 * np.pi / (2 * 360.0)],
                 dtype=float,
             )
         else:
-            self.measure_noise = np.asarray(measure_noise, dtype=float)
+            self._exp_measure_noise = np.asarray(measure_noise, dtype=float)
+        self._ideal_measure_noise = np.zeros_like(self._exp_measure_noise)
 
         self.params = params or FurutaPendulumParams()
+        self.param_delta = (
+            np.asarray(param_delta, dtype=float)
+            if param_delta is not None
+            else np.zeros_like(self.params.as_array)
+        )
         self.plant_param = self.params.as_array
-        self.dead_zone = dead_zone
+        self._exp_dead_zone = float(dead_zone)
+        self._ideal_dead_zone = 0.0
+        self.exp_mode: bool = bool(exp_mode)
 
         self.t: float = 0.0
         self.input: float = 0.0  # 直前の入力
@@ -68,6 +79,7 @@ class FURUTA_PENDULUM(BaseSimulator):
             ]
         )
         self.output = self._H @ self.state
+        self._apply_mode_settings()
 
     # ---- MATLABと同名のメソッドを外部ファイルからバインド ----
 
@@ -82,9 +94,27 @@ class FURUTA_PENDULUM(BaseSimulator):
         for k, v in kwargs.items():
             if hasattr(self.params, k):
                 setattr(self.params, k, float(v))
+        self._refresh_plant_params()
 
     def get_params(self):
         return self.params
+
+    def set_exp_mode(self, enabled: bool) -> None:
+        self.exp_mode = bool(enabled)
+        self._apply_mode_settings()
+
+    def _apply_mode_settings(self) -> None:
+        """Toggle noise, dead-zone, and parameter mismatch based on exp_mode."""
+        self.sys_noise = self._exp_sys_noise if self.exp_mode else 0.0
+        self.measure_noise = (
+            self._exp_measure_noise if self.exp_mode else self._ideal_measure_noise
+        )
+        self.dead_zone = self._exp_dead_zone if self.exp_mode else self._ideal_dead_zone
+        self._refresh_plant_params()
+
+    def _refresh_plant_params(self) -> None:
+        delta = self.param_delta if self.exp_mode else 0.0
+        self.plant_param = self.params.as_array + delta
 
     def apply_impulse(self, **kwargs) -> None:
         """クリックなどでトルクを一時的に加えるイメージ"""

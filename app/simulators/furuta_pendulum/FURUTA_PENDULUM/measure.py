@@ -18,5 +18,5 @@ def measure(self: "FURUTA_PENDULUM", t: Optional[float] = None) -> np.ndarray:
     （MATLAB のように TT, XX から補間したければ、ここに実装を追加）
     """
     self.output = self._H @ self.state
-    noise = self.measure_noise * np.random.randn(2)
+    noise = self.measure_noise * np.random.randn(2) if np.any(self.measure_noise) else 0.0
     return self.output + noise

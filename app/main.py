@@ -25,9 +25,5 @@ app.add_middleware(
 )
 
 # ルート登録（prefix で URL を分ける）
-# app.include_router(furuta_router, prefix="/furutaPendulum", tags=["furutaPendulum"])
-# app.include_router(other_sim_router, prefix="/other-sim", tags=["other-sim"])
-
-# ルーター登録
 app.include_router(params.router)
 app.include_router(ws_sim.router)

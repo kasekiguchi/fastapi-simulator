@@ -17,11 +17,13 @@ def apply_input(self: "FURUTA_PENDULUM", u: float, dt: float) -> FurutaPendulumS
         cart.apply_input(u, dt)
     に相当。入力 u を dt 秒間印加し、ODE を1ステップ解いて状態を進める。
     """
-    # デッドゾーンは設けず、そのまま入力を使う
     u_eff = u
+    if self.dead_zone > 0 and abs(u_eff) < self.dead_zone:
+        u_eff = 0.0
 
     # システムノイズ（MATLAB: u = u + sys_noise*randn/dt）
-    u_eff = u_eff + self.sys_noise * np.random.randn() / dt
+    if self.sys_noise != 0.0:
+        u_eff = u_eff + self.sys_noise * np.random.randn() / dt
 
     t0 = self.t
     t1 = self.t + dt

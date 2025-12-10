@@ -43,16 +43,20 @@ class FurutaPendulumSimulator(BaseSimulator):
         self.control_time_mode: str = "discrete"
         self.estimator_time_mode: str = "discrete"
         self.params: FurutaPendulumParams = plant_params or FurutaPendulumParams()
+        self.exp_mode: bool = False
 
         if initial_state is None:
             self._initial_array: Sequence[float] = [0.0, 0.0, 0.0, 0.0]
         else:
             self._initial_array = initial_state.as_array
 
-        self.plant = FURUTA_PENDULUM(initial=self._initial_array, params=self.params)
+        self.plant = FURUTA_PENDULUM(
+            initial=self._initial_array,
+            params=self.params,
+            exp_mode=self.exp_mode,
+        )
         self.state = FurutaPendulumState()
         self._pending_impulse: float = 0.0
-        self.exp_mode: bool = False
         self.controller: Optional[CONTROLLER] = None
         self.control_params: Dict[str, Any] = {}
         self.control_info: Dict[str, Any] = {}
@@ -65,7 +69,11 @@ class FurutaPendulumSimulator(BaseSimulator):
     def reset(self) -> None:
         """状態リセット（パラメータは維持）"""
         self._pending_impulse = 0.0
-        self.plant = FURUTA_PENDULUM(initial=self._initial_array, params=self.params)
+        self.plant = FURUTA_PENDULUM(
+            initial=self._initial_array,
+            params=self.params,
+            exp_mode=self.exp_mode,
+        )
         self.state = FurutaPendulumState()
         self._trace = self._empty_trace()
         self._est_state = None
@@ -88,7 +96,11 @@ class FurutaPendulumSimulator(BaseSimulator):
             float(initial.get("dphi", 0.0)),
         ]
         self._initial_array = arr
-        self.plant = FURUTA_PENDULUM(initial=self._initial_array, params=self.params)
+        self.plant = FURUTA_PENDULUM(
+            initial=self._initial_array,
+            params=self.params,
+            exp_mode=self.exp_mode,
+        )
         self.state = FurutaPendulumState(theta=arr[0], phi=arr[1], dtheta=arr[2], dphi=arr[3])
         self._trace = self._empty_trace()
         self._est_state = None
@@ -139,6 +151,8 @@ class FurutaPendulumSimulator(BaseSimulator):
 
     def set_exp_mode(self, exp_mode: bool) -> None:
         self.exp_mode = bool(exp_mode)
+        if hasattr(self.plant, "set_exp_mode"):
+            self.plant.set_exp_mode(self.exp_mode)
 
     def apply_impulse(self, **kwargs) -> None:
         """クリックなどで瞬間的に入れるトルク（追加入力）"""
@@ -162,7 +176,7 @@ class FurutaPendulumSimulator(BaseSimulator):
         # else:
         #     est_state = self.plant.state
         self._est_state = est_state
-        print(f"{est_state}===============")
+        # print(f"{est_state}===============")
         # 制御器があれば推定状態から入力を計算
         u_ctrl = 0.0
         if self.controller:
@@ -227,7 +241,7 @@ class FurutaPendulumSimulator(BaseSimulator):
             else:
                 xh = np.asarray(est_state, dtype=float).flatten()
             self._trace["xh"].append(xh.tolist())
-            print(f"==================={xh}")
+            # print(f"==================={xh}")
         else:
             self._trace["xh"].append(None)
 
