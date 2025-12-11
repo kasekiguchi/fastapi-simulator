@@ -66,6 +66,11 @@ class SimulationManager:
             async with self._lock:
                 self.sim.set_estimator_params(estimator_params=estimator_params)
 
+    async def set_reference(self, reference=None) -> None:
+        if hasattr(self.sim, "set_reference"):
+            async with self._lock:
+                self.sim.set_reference(reference)
+
     async def set_exp_mode(self, exp_mode: Optional[bool]) -> None:
         if exp_mode is None:
             return

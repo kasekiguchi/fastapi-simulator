@@ -121,6 +121,10 @@ async def sim_ws(websocket: WebSocket, sim_type: str):
                 estimator_params = _ensure_time_mode(estimator_params, msg)
                 if hasattr(mgr, "set_estimator_params"):
                     await mgr.set_estimator_params(estimator_params=estimator_params)
+            elif msg_type == "set_reference":
+                reference = msg.get("reference") or msg.get("payload") or msg
+                if hasattr(mgr, "set_reference"):
+                    await mgr.set_reference(reference=reference)
             elif msg_type == "set_exp_mode":
                 await mgr.set_exp_mode(msg.get("expMode"))
 
