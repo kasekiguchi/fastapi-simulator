@@ -38,6 +38,8 @@ class DiffDriveSimulator(BaseSimulator):
         )
         self.controller = DiffDriveController(self.params)
         self.reference: DiffDriveReference = HoldReference()
+        self.control_mode: str = "controller"  # "controller" | "external"
+        self._external_input: tuple[float, float] = (0.0, 0.0)
         self._pending_v: float = 0.0
         self._pending_omega: float = 0.0
         self._last_control = (0.0, 0.0)
@@ -82,6 +84,20 @@ class DiffDriveSimulator(BaseSimulator):
     def set_control_params(self, control_params: Optional[Dict[str, Any]] = None) -> None:
         if not control_params:
             return
+        ctype = control_params.get("type") if isinstance(control_params, dict) else None
+        if ctype == "external":
+            inp = control_params.get("input") if isinstance(control_params, dict) else None
+            v, omega = 0.0, 0.0
+            if isinstance(inp, (list, tuple)) and len(inp) >= 2:
+                v, omega = float(inp[0]), float(inp[1])
+            elif isinstance(inp, dict):
+                v = float(inp.get("v", 0.0))
+                omega = float(inp.get("omega", 0.0))
+            self._external_input = (v, omega)
+            self.control_mode = "external"
+            return
+
+        self.control_mode = "controller"
         self.controller.set_control_params(control_params)
 
     def set_reference(self, reference: Optional[Dict[str, Any]]) -> None:
@@ -104,7 +120,10 @@ class DiffDriveSimulator(BaseSimulator):
 
     def step(self) -> PublicDiffDriveState:
         ref = self.reference.sample(self.state.t) if self.reference else RefSample(np.zeros(2), 0.0, 0.0, 0.0)
-        v_cmd, omega_cmd = self._compute_control(ref)
+        if self.control_mode == "external":
+            v_cmd, omega_cmd = self._external_input
+        else:
+            v_cmd, omega_cmd = self._compute_control(ref)
         v_cmd += self._pending_v
         omega_cmd += self._pending_omega
         self._pending_v = 0.0
