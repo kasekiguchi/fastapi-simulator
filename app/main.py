@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import params, ws_sim
+from .routers import ws_sim
 
 app = FastAPI(
     title="Simulator API",
@@ -25,5 +25,4 @@ app.add_middleware(
 )
 
 # ルート登録（prefix で URL を分ける）
-app.include_router(params.router)
 app.include_router(ws_sim.router)

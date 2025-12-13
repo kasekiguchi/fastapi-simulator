@@ -45,7 +45,11 @@ def build_linear_model(
     if include_output:
         A, B, C = mats
     else:
-        A, B = mats
+        # Allow matrices_fn to return either (A,B) or (A,B,C); ignore extra outputs.
+        if len(mats) >= 2:
+            A, B = mats[0], mats[1]
+        else:
+            raise ValueError("matrices_fn must return at least (A, B)")
         C = np.eye(A.shape[0])
 
     if time_mode == "discrete":

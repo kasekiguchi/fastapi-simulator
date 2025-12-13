@@ -77,6 +77,47 @@ class GenericController:
             q = control_params.get("Q") or []
             r = control_params.get("R") or []
             self.strategy = LQRController(self.params, self.dt, tm, self.matrices_fn, q, r)
+        elif ctype == "pid":
+            from .pid import PIDController
+
+            kp = control_params.get("kp", control_params.get("Kp", 0.0))
+            ki = control_params.get("ki", control_params.get("Ki", 0.0))
+            kd = control_params.get("kd", control_params.get("Kd", 0.0))
+            ref = (
+                control_params.get("ref")
+                or control_params.get("reference")
+                or control_params.get("refValues")
+                or control_params.get("ref_values")
+            )
+            state_idx = control_params.get("stateIndex", control_params.get("state_index", 0))
+            vel_idx = control_params.get("velIndex", control_params.get("vel_index", 1))
+            ref_idx = control_params.get("refIndex", control_params.get("ref_index"))
+
+            # Normalize indices: allow list/tuple [pos, vel]
+            def _pair(val, default_pos, default_vel):
+                if isinstance(val, (list, tuple)) and len(val) >= 1:
+                    pos_i = val[0]
+                    vel_i = val[1] if len(val) >= 2 else default_vel
+                else:
+                    pos_i = val
+                    vel_i = default_vel
+                return pos_i, vel_i
+
+            pos_idx, vel_idx_norm = _pair(state_idx, 0, vel_idx)
+            ref_pos_idx, ref_vel_idx = _pair(ref_idx, pos_idx, vel_idx_norm)
+            self.strategy = PIDController(
+                kp=kp,
+                ki=ki,
+                kd=kd,
+                dt=self.dt,
+                ref=ref if ref is not None else 0.0,
+                pos_index=int(pos_idx) if pos_idx is not None else 0,
+                vel_index=None if vel_idx_norm is None else int(vel_idx_norm),
+                ref_pos_index=None if ref_pos_idx is None else int(ref_pos_idx),
+                ref_vel_index=None if ref_vel_idx is None else int(ref_vel_idx),
+            )
+            if ref is not None:
+                self.strategy.set_reference(ref)
         else:
             self.strategy = None
 

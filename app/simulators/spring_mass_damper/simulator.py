@@ -33,6 +33,7 @@ class SpringMassDamperSimulator(BaseSimulator):
         self.params = params or SmdParams()
         self.state = initial_state or SmdState()
         self._pending_impulse: float = 0.0
+        self._pending_vel_kick: float = 0.0
         self.controller: Optional[CONTROLLER] = None
         self.control_params: Dict[str, Any] = {}
         self.control_time_mode: str = "discrete"
@@ -43,6 +44,7 @@ class SpringMassDamperSimulator(BaseSimulator):
         self._est_state = None
         self._last_u: float = 0.0
         self._trace = self._empty_trace()
+        self._reference: float = 0.0
 
     def reset(self) -> None:
         self.state = SmdState()
@@ -54,16 +56,58 @@ class SpringMassDamperSimulator(BaseSimulator):
             self.controller.reset()
         if self.estimator:
             self.estimator.reset()
+        self._pending_vel_kick = 0.0
 
     def set_params(self, **kwargs) -> None:
+        alias = {
+            "damping": "c",
+            "damp": "c",
+            "beta": "c",
+            "spring": "k",
+            "stiffness": "k",
+            "K": "k",
+            "mass": "mass",
+            "m": "mass",
+            "M": "mass",
+            "D": "c",
+        }
         for k, v in kwargs.items():
-            if hasattr(self.params, k):
-                setattr(self.params, k, float(v))
+            key = alias.get(k, k)
+            if hasattr(self.params, key):
+                setattr(self.params, key, float(v))
         if self.controller:
             self.controller.set_params(**kwargs)
             self.control_info = self._compute_control_info()
         if self.estimator:
             self.estimator.set_params(**kwargs)
+
+    def set_reference(self, reference=None) -> None:
+        """Accept step reference for position."""
+        val = 0.0
+        if isinstance(reference, dict):
+            rtype = reference.get("type")
+            if rtype == "step":
+                val = reference.get("position", reference.get("pos", reference.get("p", 0.0)))
+            elif "value" in reference:
+                val = reference.get("value", 0.0)
+            elif "values" in reference:
+                try:
+                    vals = reference.get("values", [])
+                    val = vals[0] if len(vals) > 0 else 0.0
+                except Exception:
+                    val = 0.0
+        elif reference is not None:
+            val = reference
+        try:
+            self._reference = float(val)
+        except (TypeError, ValueError):
+            self._reference = 0.0
+
+        if self.controller and hasattr(self.controller, "strategy") and hasattr(self.controller.strategy, "set_reference"):
+            try:
+                self.controller.strategy.set_reference(self._reference)
+            except Exception:
+                pass
 
     def set_initial(self, **kwargs) -> None:
         if not kwargs:
@@ -77,7 +121,13 @@ class SpringMassDamperSimulator(BaseSimulator):
 
     def apply_impulse(self, **kwargs) -> None:
         force = float(kwargs.get("force", kwargs.get("torque", 0.0)))
-        self._pending_impulse += force
+        # Treat click as an impulse in the negative direction
+        self._pending_impulse -= force
+        # Immediate velocity kick for better responsiveness (Δv = F/m)
+        try:
+            self._pending_vel_kick += (-force) / float(self.params.mass)
+        except Exception:
+            pass
 
     def set_control_params(self, control_params: Optional[Dict[str, Any]] = None) -> None:
         if not control_params or "type" not in control_params:
@@ -92,6 +142,12 @@ class SpringMassDamperSimulator(BaseSimulator):
         settings = ControllerParams(time_mode=tm, dt=self.dt)
         self.controller = CONTROLLER(parameters=self.params, settings=settings, dt=self.dt)
         self.controller.set_control_params(control_params)
+        # Apply stored reference if controller supports it (e.g., PID)
+        if hasattr(self.controller, "strategy") and hasattr(self.controller.strategy, "set_reference"):
+            try:
+                self.controller.strategy.set_reference(self._reference)
+            except Exception:
+                pass
         self.control_info = self._compute_control_info()
 
     def set_estimator_params(self, estimator_params: Optional[Dict[str, Any]] = None) -> None:
@@ -122,10 +178,14 @@ class SpringMassDamperSimulator(BaseSimulator):
         u = float(np.clip(u, -1e3, 1e3))  # 入力暴走ガード
 
         m, k, c = self.params.mass, self.params.k, self.params.c
-        p, v = self.state.p, self.state.v
-        dp = v
-        dv = (u - c * v - k * p) / m
-        self.state = SmdState(p=p + dp * self.dt, v=v + dv * self.dt, t=self.state.t + self.dt)
+        p = self.state.p
+        v = self.state.v + self._pending_vel_kick
+        self._pending_vel_kick = 0.0
+        # Semi-implicit Euler (symplectic) for better energy behavior in undamped case
+        acc = (u - c * v - k * p) / m
+        v_new = v + acc * self.dt
+        p_new = p + v_new * self.dt
+        self.state = SmdState(p=p_new, v=v_new, t=self.state.t + self.dt)
         y = self.state.p
 
         if self.estimator:

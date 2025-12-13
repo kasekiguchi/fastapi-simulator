@@ -21,12 +21,12 @@ class ParamsRequest(BaseModel):
 
 
 @router.post("/{sim_type}/start")
-async def start_sim(sim_type: str):
+async def start_sim(sim_type: str, duration: float | None = None):
     try:
         mgr = get_manager(sim_type)
     except ValueError:
         raise HTTPException(status_code=404, detail="Unknown simulator")
-    await mgr.start()
+    await mgr.start(duration=duration)
     return {"status": "started", "sim_type": sim_type}
 
 

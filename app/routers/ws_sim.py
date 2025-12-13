@@ -1,7 +1,7 @@
 # app/routers/ws_sim.py
 import asyncio
 import json
-from typing import Dict, Set
+from typing import Dict, Set, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 
@@ -16,6 +16,8 @@ router = APIRouter(tags=["ws"])
 
 # sim_type -> set(WebSocket)
 _clients: Dict[str, Set[WebSocket]] = {}
+# sim_type -> set(WebSocket) that should receive stop/trace notifications
+_stop_watchers: Dict[str, Set[WebSocket]] = {}
 
 
 def _simstate_to_dict(simState: SimState) -> dict:
@@ -33,6 +35,25 @@ def _ensure_time_mode(params: dict, src: dict) -> dict:
     if params.get("timeMode") == tm and params.get("time_mode") == tm:
         return params
     return {**params, "timeMode": tm, "time_mode": tm}
+
+
+def _extract_duration(msg: dict) -> Optional[float]:
+    """Try to fetch duration from payload or top-level fields."""
+    payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else None
+    val = None
+    for key in ("duration", "simTime", "sim_time"):
+        if val is not None:
+            break
+        if payload and key in payload:
+            val = payload.get(key)
+        elif key in msg:
+            val = msg.get(key)
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
 
 
 async def _safe_send(ws: WebSocket, text: str):
@@ -56,6 +77,30 @@ def _attach_broadcast_listener(sim_type: str):
 
     mgr.add_listener(listener)
 
+    async def stop_listener(auto: bool, state: SimState | None):
+        # Send stop info only to watchers that initiated a start/stop, not all viewers.
+        watchers = _stop_watchers.get(sim_type, set())
+        if not watchers:
+            return
+        payload = {
+            "auto": bool(auto),
+            "t": getattr(state, "t", None) if state is not None else None,
+            "limit": mgr.current_limit(),
+        }
+        msg = json.dumps({"type": "stopped", "payload": payload})
+        for ws in list(watchers):
+            asyncio.create_task(_safe_send(ws, msg))
+
+        # On auto stop, also share the trace with the same watchers.
+        if auto:
+            trace = await mgr.get_trace()
+            if trace is not None:
+                trace_msg = json.dumps({"type": "trace", "payload": trace})
+                for ws in list(watchers):
+                    asyncio.create_task(_safe_send(ws, trace_msg))
+
+    mgr.add_stop_listener(stop_listener)
+
 
 @router.websocket("/ws/{sim_type}")
 async def sim_ws(websocket: WebSocket, sim_type: str):
@@ -75,6 +120,8 @@ async def sim_ws(websocket: WebSocket, sim_type: str):
     if sim_type not in _clients:
         _clients[sim_type] = set()
         _attach_broadcast_listener(sim_type)
+    if sim_type not in _stop_watchers:
+        _stop_watchers[sim_type] = set()
 
     _clients[sim_type].add(websocket)
     print(f"[ws_sim] client connected: {sim_type}, total={len(_clients[sim_type])}")
@@ -98,8 +145,10 @@ async def sim_ws(websocket: WebSocket, sim_type: str):
                         payload[k] = msg[k]
                 await mgr.apply_impulse(**payload)
             elif msg_type == "start":
-                await mgr.start()
+                _stop_watchers.get(sim_type, set()).add(websocket)
+                await mgr.start(duration=_extract_duration(msg))
             elif msg_type == "stop":
+                _stop_watchers.get(sim_type, set()).add(websocket)
                 await mgr.stop()
                 trace = await mgr.get_trace()
                 if trace is not None:
@@ -133,3 +182,4 @@ async def sim_ws(websocket: WebSocket, sim_type: str):
         logger.info("disconnected %s", sim_type)
     finally:
         _clients[sim_type].discard(websocket)
+        _stop_watchers.get(sim_type, set()).discard(websocket)
