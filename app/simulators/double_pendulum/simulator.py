@@ -21,6 +21,7 @@ class PublicDoublePendulumState(SimState):
     dtheta1: float = 0.0
     dtheta2: float = 0.0
     u: float = 0.0
+    control_mode: str = "controller"
     closed_loop_poles: Optional[List[Dict[str, float]]] = None
     feedback_gain: Optional[List[List[float]]] = None
     design_error: Optional[str] = None
@@ -214,6 +215,7 @@ class DoublePendulumSimulator(BaseSimulator):
             dtheta1=self.state.dtheta1,
             dtheta2=self.state.dtheta2,
             u=self._last_u,
+            control_mode=getattr(self, 'control_mode', 'controller'),
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
             feedback_gain=self.control_info.get("feedback_gain"),
         )

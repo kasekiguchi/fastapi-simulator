@@ -25,6 +25,7 @@ class PublicSegwayState(SimState):
     dtheta: float = 0.0
     dpsi: float = 0.0
     u: float = 0.0
+    control_mode: str = "controller"
     closed_loop_poles: Optional[List[Dict[str, float]]] = None
     feedback_gain: Optional[List[List[float]]] = None
     design_error: Optional[str] = None
@@ -229,6 +230,7 @@ class SegwaySimulator(BaseSimulator):
             dtheta=self.state.dtheta,
             dpsi=self.state.dpsi,
             u=float(self._last_u[0]) if len(self._last_u) > 0 else 0.0,
+            control_mode=getattr(self, 'control_mode', 'controller'),
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
             feedback_gain=self.control_info.get("feedback_gain"),
         )

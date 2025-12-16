@@ -23,6 +23,7 @@ class PublicFPState(SimState):
     u: float = 0.0
     y0: float = 0.0
     y1: float = 0.0
+    control_mode: str = "controller"
     closed_loop_poles: Optional[List[Dict[str, float]]] = None
     feedback_gain: Optional[List[List[float]]] = None
     design_error: Optional[str] = None
@@ -262,6 +263,7 @@ class FurutaPendulumSimulator(BaseSimulator):
             u=u,
             y0=y0,
             y1=y1,
+            control_mode=getattr(self, 'control_mode', 'controller'),
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
             feedback_gain=self.control_info.get("feedback_gain"),
             design_error=self.control_info.get("design_error"),
@@ -286,9 +288,10 @@ class FurutaPendulumSimulator(BaseSimulator):
             dtheta=dtheta,
             phi=phi,
             dphi=dphi,
-            u=self._pending_impulse,
+            u=self._last_u,
             y0=y0,
             y1=y1,
+            control_mode=getattr(self, 'control_mode', 'controller'),
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
             feedback_gain=self.control_info.get("feedback_gain"),
             design_error=self.control_info.get("design_error"),

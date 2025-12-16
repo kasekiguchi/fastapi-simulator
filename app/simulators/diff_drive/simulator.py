@@ -21,6 +21,9 @@ class PublicDiffDriveState(SimState):
     ref_x: float = 0.0
     ref_y: float = 0.0
     ref_theta: float = 0.0
+    u_v: float = 0.0
+    u_omega: float = 0.0
+    control_mode: str = "controller"
 
 
 class DiffDriveSimulator(BaseSimulator):
@@ -141,6 +144,9 @@ class DiffDriveSimulator(BaseSimulator):
             ref_x=ref.pos[0],
             ref_y=ref.pos[1],
             ref_theta=ref.theta,
+            u_v=v_cmd,
+            u_omega=omega_cmd,
+            control_mode=self.control_mode,
         )
 
     def get_public_state(self) -> PublicDiffDriveState:
@@ -155,6 +161,9 @@ class DiffDriveSimulator(BaseSimulator):
             ref_x=ref.pos[0],
             ref_y=ref.pos[1],
             ref_theta=ref.theta,
+            u_v=self._last_control[0],
+            u_omega=self._last_control[1],
+            control_mode=self.control_mode,
         )
 
     def get_trace(self) -> Dict[str, list]:

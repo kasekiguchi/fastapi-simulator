@@ -18,6 +18,7 @@ class PublicSmdState(SimState):
     v: float = 0.0
     u: float = 0.0
     y: float = 0.0
+    control_mode: str = "controller"
     closed_loop_poles: Optional[List[Dict[str, float]]] = None
     feedback_gain: Optional[List[List[float]]] = None
 
@@ -220,6 +221,7 @@ class SpringMassDamperSimulator(BaseSimulator):
             v=self.state.v,
             u=u,
             y=y,
+            control_mode=getattr(self, 'control_mode', 'controller'),
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
             feedback_gain=self.control_info.get("feedback_gain"),
         )
@@ -229,8 +231,9 @@ class SpringMassDamperSimulator(BaseSimulator):
             t=self.state.t,
             p=self.state.p,
             v=self.state.v,
-            u=0.0,
+            u=self._last_u,
             y=self.state.p,
+            control_mode=getattr(self, 'control_mode', 'controller'),
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
             feedback_gain=self.control_info.get("feedback_gain"),
         )
