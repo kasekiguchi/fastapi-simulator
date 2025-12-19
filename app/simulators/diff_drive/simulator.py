@@ -161,9 +161,7 @@ class DiffDriveSimulator(BaseSimulator):
         )
 
     def get_trace(self) -> Dict[str, list]:
-        trace = {k: v.copy() for k, v in self._trace.items()}
-        trace["reference"] = self._reference_cfg
-        return trace
+        return {k: v.copy() for k, v in self._trace.items()}
 
     @staticmethod
     def _empty_trace() -> Dict[str, list]:
