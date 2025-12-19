@@ -15,12 +15,12 @@ from .controller import DiffDriveController
 class PublicDiffDriveState(SimState):
     x: float = 0.0
     y: float = 0.0
-    theta: float = 0.0
+    yaw: float = 0.0
     v: float = 0.0
     omega: float = 0.0
     ref_x: float = 0.0
     ref_y: float = 0.0
-    ref_theta: float = 0.0
+    ref_yaw: float = 0.0
 
 
 class DiffDriveSimulator(BaseSimulator):
@@ -31,7 +31,7 @@ class DiffDriveSimulator(BaseSimulator):
         self.state = DiffDriveState(
             x=self._initial_state.x,
             y=self._initial_state.y,
-            theta=self._initial_state.theta,
+            yaw=self._initial_state.yaw,
             v=self._initial_state.v,
             omega=self._initial_state.omega,
             t=0.0,
@@ -50,7 +50,7 @@ class DiffDriveSimulator(BaseSimulator):
         self.state = DiffDriveState(
             x=self._initial_state.x,
             y=self._initial_state.y,
-            theta=self._initial_state.theta,
+            yaw=self._initial_state.yaw,
             v=self._initial_state.v,
             omega=self._initial_state.omega,
             t=0.0,
@@ -67,10 +67,10 @@ class DiffDriveSimulator(BaseSimulator):
             return
         x = float(initial.get("x", 0.0))
         y = float(initial.get("y", 0.0))
-        theta = float(initial.get("theta", 0.0))
+        yaw = float(initial.get("yaw", initial.get("theta", 0.0)))
         v = float(initial.get("v", 0.0))
         omega = float(initial.get("omega", 0.0))
-        self._initial_state = DiffDriveState(x=x, y=y, theta=theta, v=v, omega=omega, t=0.0)
+        self._initial_state = DiffDriveState(x=x, y=y, yaw=yaw, v=v, omega=omega, t=0.0)
         self.reset()
 
     def apply_impulse(self, **kwargs) -> None:
@@ -110,11 +110,11 @@ class DiffDriveSimulator(BaseSimulator):
             self._reference_cfg = reference if isinstance(reference, dict) else None
 
     def _integrate(self, v: float, omega: float) -> None:
-        x, y, theta = self.state.x, self.state.y, self.state.theta
-        x = x + self.dt * v * np.cos(theta)
-        y = y + self.dt * v * np.sin(theta)
-        theta = theta + self.dt * omega
-        self.state = DiffDriveState(x=x, y=y, theta=theta, v=v, omega=omega, t=self.state.t + self.dt)
+        x, y, yaw = self.state.x, self.state.y, self.state.yaw
+        x = x + self.dt * v * np.cos(yaw)
+        y = y + self.dt * v * np.sin(yaw)
+        yaw = yaw + self.dt * omega
+        self.state = DiffDriveState(x=x, y=y, yaw=yaw, v=v, omega=omega, t=self.state.t + self.dt)
 
     def _compute_control(self, ref: RefSample) -> tuple[float, float]:
         if self.controller:
@@ -138,12 +138,12 @@ class DiffDriveSimulator(BaseSimulator):
             t=self.state.t,
             x=self.state.x,
             y=self.state.y,
-            theta=self.state.theta,
+            yaw=self.state.yaw,
             v=self.state.v,
             omega=self.state.omega,
             ref_x=ref.pos[0],
             ref_y=ref.pos[1],
-            ref_theta=ref.theta,
+            ref_yaw=ref.yaw,
         )
 
     def get_public_state(self) -> PublicDiffDriveState:
@@ -152,12 +152,12 @@ class DiffDriveSimulator(BaseSimulator):
             t=self.state.t,
             x=self.state.x,
             y=self.state.y,
-            theta=self.state.theta,
+            yaw=self.state.yaw,
             v=self.state.v,
             omega=self.state.omega,
             ref_x=ref.pos[0],
             ref_y=ref.pos[1],
-            ref_theta=ref.theta,
+            ref_yaw=ref.yaw,
         )
 
     def get_trace(self) -> Dict[str, list]:
@@ -167,15 +167,15 @@ class DiffDriveSimulator(BaseSimulator):
 
     @staticmethod
     def _empty_trace() -> Dict[str, list]:
-        return {"t": [], "x": [], "y": [], "theta": [], "v": [], "omega": [], "ref": []}
+        return {"t": [], "x": [], "y": [], "yaw": [], "v": [], "omega": [], "ref": []}
 
     def _log_trace(self, ref: RefSample) -> None:
         self._trace["t"].append(self.state.t)
         self._trace["x"].append(self.state.x)
         self._trace["y"].append(self.state.y)
-        self._trace["theta"].append(self.state.theta)
+        self._trace["yaw"].append(self.state.yaw)
         self._trace["v"].append(self.state.v)
         self._trace["omega"].append(self.state.omega)
         self._trace["ref"].append(
-            {"x": float(ref.pos[0]), "y": float(ref.pos[1]), "theta": float(ref.theta)}
+            {"x": float(ref.pos[0]), "y": float(ref.pos[1]), "yaw": float(ref.yaw)}
         )

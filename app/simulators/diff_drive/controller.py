@@ -57,18 +57,18 @@ class DiffDriveController:
             return 0.0, 0.0
         dx = ref.pos[0] - state.x
         dy = ref.pos[1] - state.y
-        e_theta = _wrap_angle(ref.theta - state.theta)
-        c, s = math.cos(ref.theta), math.sin(ref.theta)
+        e_yaw = _wrap_angle(ref.yaw - state.yaw)
+        c, s = math.cos(ref.yaw), math.sin(ref.yaw)
         e_x = c * dx + s * dy
         e_y = -s * dx + c * dy
         if self.mode == "lqr":
-            v_cmd, omega_cmd = self._lqr_control(ref, e_x, e_y, e_theta)
+            v_cmd, omega_cmd = self._lqr_control(ref, e_x, e_y, e_yaw)
         else:
             v_cmd = ref.v + self.gains["kx"] * e_x
-            omega_cmd = ref.omega + self.gains["ky"] * e_y + self.gains["ktheta"] * e_theta
+            omega_cmd = ref.omega + self.gains["ky"] * e_y + self.gains["ktheta"] * e_yaw
         return float(v_cmd), float(omega_cmd)
 
-    def _lqr_control(self, ref: RefSample, e_x: float, e_y: float, e_theta: float) -> tuple[float, float]:
+    def _lqr_control(self, ref: RefSample, e_x: float, e_y: float, e_yaw: float) -> tuple[float, float]:
         v_ref = max(abs(ref.v), 1e-3)
         omega_ref = ref.omega
         A = np.array(
@@ -83,12 +83,12 @@ class DiffDriveController:
         try:
             P = linalg.solve_continuous_are(A, B, self.q, self.r)
             K = np.linalg.inv(self.r) @ (B.T @ P)
-            e = np.array([e_x, e_y, e_theta], dtype=float)
+            e = np.array([e_x, e_y, e_yaw], dtype=float)
             u_fb = -K @ e
             v = ref.v + u_fb[0]
             omega = ref.omega + u_fb[1]
             return v, omega
         except Exception:
             v = ref.v + self.gains["kx"] * e_x
-            omega = ref.omega + self.gains["ky"] * e_y + self.gains["ktheta"] * e_theta
+            omega = ref.omega + self.gains["ky"] * e_y + self.gains["ktheta"] * e_yaw
             return v, omega

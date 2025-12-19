@@ -10,7 +10,7 @@ import numpy as np
 @dataclass
 class RefSample:
     pos: np.ndarray
-    theta: float
+    yaw: float
     v: float
     omega: float
 
@@ -53,12 +53,12 @@ class DiffDriveReference:
 
 
 class HoldReference(DiffDriveReference):
-    def __init__(self, pos: Tuple[float, float] = (0.0, 0.0), theta: float = 0.0):
+    def __init__(self, pos: Tuple[float, float] = (0.0, 0.0), yaw: float = 0.0):
         self.pos = np.asarray(pos, dtype=float)
-        self.theta = float(theta)
+        self.yaw = float(yaw)
 
     def sample(self, t: float) -> RefSample:
-        return RefSample(pos=self.pos, theta=self.theta, v=0.0, omega=0.0)
+        return RefSample(pos=self.pos, yaw=self.yaw, v=0.0, omega=0.0)
 
 
 class LineReference(DiffDriveReference):
@@ -69,15 +69,15 @@ class LineReference(DiffDriveReference):
         diff = self.end - self.start
         self.length = float(np.linalg.norm(diff))
         self.dir_vec = diff / self.length if self.length > 1e-9 else np.zeros_like(diff)
-        self.theta = float(math.atan2(self.dir_vec[1], self.dir_vec[0])) if self.length > 0 else 0.0
+        self.yaw = float(math.atan2(self.dir_vec[1], self.dir_vec[0])) if self.length > 0 else 0.0
 
     def sample(self, t: float) -> RefSample:
         if self.length <= 0:
-            return RefSample(pos=self.start, theta=self.theta, v=0.0, omega=0.0)
+            return RefSample(pos=self.start, yaw=self.yaw, v=0.0, omega=0.0)
         s = max(0.0, min(self.speed * t, self.length))
         pos = self.start + self.dir_vec * s
         v = self.speed if s < self.length else 0.0
-        return RefSample(pos=pos, theta=self.theta, v=v, omega=0.0)
+        return RefSample(pos=pos, yaw=self.yaw, v=v, omega=0.0)
 
 
 class CircleReference(DiffDriveReference):
@@ -93,10 +93,10 @@ class CircleReference(DiffDriveReference):
         pos = self.center + np.array([self.radius * math.cos(ang), self.radius * math.sin(ang)], dtype=float)
         xdot = -self.radius * math.sin(ang) * ang_vel
         ydot = self.radius * math.cos(ang) * ang_vel
-        theta = math.atan2(ydot, xdot)
+        yaw = math.atan2(ydot, xdot)
         v = math.hypot(xdot, ydot)
         omega = ang_vel
-        return RefSample(pos=pos, theta=_wrap_angle(theta), v=v, omega=omega)
+        return RefSample(pos=pos, yaw=_wrap_angle(yaw), v=v, omega=omega)
 
 
 class EllipseReference(DiffDriveReference):
@@ -115,6 +115,6 @@ class EllipseReference(DiffDriveReference):
         xdot = -self.rx * math.sin(ang) * ang_vel
         ydot = self.ry * math.cos(ang) * ang_vel
         v = math.hypot(xdot, ydot)
-        theta = math.atan2(ydot, xdot)
+        yaw = math.atan2(ydot, xdot)
         omega = ang_vel
-        return RefSample(pos=pos, theta=_wrap_angle(theta), v=v, omega=omega)
+        return RefSample(pos=pos, yaw=_wrap_angle(yaw), v=v, omega=omega)

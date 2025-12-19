@@ -7,7 +7,7 @@ from ..base import SimState
 class DiffDriveState(SimState):
     x: float = 0.0
     y: float = 0.0
-    theta: float = 0.0
+    yaw: float = 0.0
     v: float = 0.0
     omega: float = 0.0
 
