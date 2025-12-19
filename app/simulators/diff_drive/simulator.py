@@ -38,6 +38,7 @@ class DiffDriveSimulator(BaseSimulator):
         )
         self.controller = DiffDriveController(self.params)
         self.reference: DiffDriveReference = HoldReference()
+        self._reference_cfg: Optional[Dict[str, Any]] = None
         self.control_mode: str = "controller"  # "controller" | "external"
         self._external_input: tuple[float, float] = (0.0, 0.0)
         self._pending_v: float = 0.0
@@ -103,8 +104,10 @@ class DiffDriveSimulator(BaseSimulator):
     def set_reference(self, reference: Optional[Dict[str, Any]]) -> None:
         if reference is None:
             self.reference = HoldReference()
+            self._reference_cfg = None
         else:
             self.reference = DiffDriveReference.from_dict(reference)
+            self._reference_cfg = reference if isinstance(reference, dict) else None
 
     def _integrate(self, v: float, omega: float) -> None:
         x, y, theta = self.state.x, self.state.y, self.state.theta
@@ -158,7 +161,9 @@ class DiffDriveSimulator(BaseSimulator):
         )
 
     def get_trace(self) -> Dict[str, list]:
-        return {k: v.copy() for k, v in self._trace.items()}
+        trace = {k: v.copy() for k, v in self._trace.items()}
+        trace["reference"] = self._reference_cfg
+        return trace
 
     @staticmethod
     def _empty_trace() -> Dict[str, list]:
