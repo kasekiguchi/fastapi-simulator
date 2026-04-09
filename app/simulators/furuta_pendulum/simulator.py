@@ -286,7 +286,7 @@ class FurutaPendulumSimulator(BaseSimulator):
             dtheta=dtheta,
             phi=phi,
             dphi=dphi,
-            u=self._pending_impulse,
+            u=u,
             y0=y0,
             y1=y1,
             closed_loop_poles=self.control_info.get("closed_loop_poles"),
