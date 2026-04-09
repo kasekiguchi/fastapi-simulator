@@ -173,8 +173,8 @@ class FurutaPendulumSimulator(BaseSimulator):
                 est_state = None
             if est_state is None:
                 est_state = self._est_state if self._est_state is not None else self.plant.state
-        # else:
-        #     est_state = self.plant.state
+        else:
+            est_state = self.plant.state
         self._est_state = est_state
         # print(f"{est_state}===============")
         # 制御器があれば推定状態から入力を計算
