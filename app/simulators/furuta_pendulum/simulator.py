@@ -194,6 +194,11 @@ class FurutaPendulumSimulator(BaseSimulator):
             u = 0.0
         u = float(np.clip(u, -1e3, 1e3))  # 入力暴走の簡易ガード
 
+        # 1秒ごとにログ出力
+        t_now = self.plant.t
+        if t_now % 1.0 < self.dt or t_now < self.dt:
+            print(f"[FP] t={t_now:.3f} u={u:.6f} u_ctrl={u_ctrl:.6f} state={list(self.plant.state)}")
+
         # プラントを進める
         try:
             plant_state = self.plant.apply_input(u, self.dt)
