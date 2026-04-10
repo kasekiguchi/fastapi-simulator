@@ -113,11 +113,11 @@ class FurutaPendulumSimulator(BaseSimulator):
         # FURUTA_PENDULUM が参照するパラメータも更新
         self.plant.params = self.params
         self.plant.plant_param = self.params.as_array
-        if self.controller:
-            self.controller.set_params(**kwargs)
-            self.control_info = self._compute_control_info()
-        if self.estimator:
-            self.estimator.set_params(**kwargs)
+        # パラメータ変更後、制御器・推定器のゲインも再設計する
+        if self.controller and self.control_params:
+            self.set_control_params(control_params=self.control_params)
+        if self.estimator and self.estimator_params:
+            self.set_estimator_params(estimator_params=self.estimator_params)
 
     def set_control_params(self, control_params: Optional[Dict[str, Any]] = None) -> None:
         """制御器を選択し、パラメータを設定する。"""

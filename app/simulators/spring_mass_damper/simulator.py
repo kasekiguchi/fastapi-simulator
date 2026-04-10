@@ -75,11 +75,11 @@ class SpringMassDamperSimulator(BaseSimulator):
             key = alias.get(k, k)
             if hasattr(self.params, key):
                 setattr(self.params, key, float(v))
-        if self.controller:
-            self.controller.set_params(**kwargs)
-            self.control_info = self._compute_control_info()
-        if self.estimator:
-            self.estimator.set_params(**kwargs)
+        # パラメータ変更後、制御器・推定器のゲインも再設計する
+        if self.controller and self.control_params:
+            self.set_control_params(control_params=self.control_params)
+        if self.estimator and self.estimator_params:
+            self.set_estimator_params(estimator_params=self.estimator_params)
 
     def set_reference(self, reference=None) -> None:
         """Accept step reference for position."""
