@@ -197,7 +197,7 @@ class FurutaPendulumSimulator(BaseSimulator):
         # 1秒ごとにログ出力
         t_now = self.plant.t
         if t_now % 1.0 < self.dt or t_now < self.dt:
-            print(f"[FP] t={t_now:.3f} u={u:.6f} u_ctrl={u_ctrl:.6f} state={list(self.plant.state)}")
+            print(f"[FP] t={t_now:.3f} u={u:.6f} u_ctrl={u_ctrl:.6f} ctrl={self.controller is not None} est={self.estimator is not None} state={[round(float(x),4) for x in self.plant.state]}", flush=True)
 
         # プラントを進める
         try:
