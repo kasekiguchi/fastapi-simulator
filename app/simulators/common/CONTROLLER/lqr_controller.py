@@ -53,8 +53,7 @@ class LQRController(_LinearControllerStrategy):
     def compute(self, state):
         x = state_vector(state, expected_dim=self.nx)
         try:
-            val = -float(self.K @ x[: self.nx])
-            return val
+            return -float((self.K @ x[: self.nx]).item())
         except Exception as e:
             print(f"[LQR] compute error: {e}, K.shape={self.K.shape}, x={x}", flush=True)
             return 0.0
