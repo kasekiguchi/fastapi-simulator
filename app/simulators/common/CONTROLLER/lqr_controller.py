@@ -27,18 +27,18 @@ class LQRController(_LinearControllerStrategy):
                 P = linalg.solve_discrete_are(self.Ad, self.Bd, self.Q, self.R)
                 BtP = self.Bd.T @ P
                 self.K = np.linalg.inv(BtP @ self.Bd + self.R) @ (BtP @ self.Ad)
+                print(f"[LQR] discrete gain: {self.K}", flush=True)
                 return
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[LQR] discrete DARE failed: {e}", flush=True)
         try:
             P = linalg.solve_continuous_are(self.A, self.B, self.Q, self.R)
             BtP = self.B.T @ P
             self.K = np.linalg.inv(BtP @ self.B + self.R) @ (BtP @ self.A)
-            print(f"[LQR] discrete gain matrix (): {self.K}")
-
-        except Exception:
+            print(f"[LQR] continuous gain: {self.K}", flush=True)
+        except Exception as e:
             self.K = np.zeros((self.nu, self.nx))
-        print(f"[LQR] discrete gain matrix (KNV0): {self.K}")
+            print(f"[LQR] continuous CARE also failed: {e}", flush=True)
 
 
     def set_params(self, params) -> None:
