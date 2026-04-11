@@ -36,10 +36,13 @@ class GenericController:
 
     def compute(self, state) -> float:
         if not self.strategy:
+            print(f"[Controller] no strategy set", flush=True)
             return 0.0
         try:
-            return float(self.strategy.compute(state))
-        except Exception:
+            result = self.strategy.compute(state)
+            return float(result)
+        except Exception as e:
+            print(f"[Controller] compute error: {e}, state={state}, K={getattr(self.strategy, 'K', None)}", flush=True)
             return 0.0
 
     def reset(self) -> None:

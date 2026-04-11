@@ -183,7 +183,8 @@ class FurutaPendulumSimulator(BaseSimulator):
             ctrl_state = self._est_state if (self._est_state is not None and not getattr(self.estimator, "passthrough", False))            else self.plant.state
             try:
                 u_ctrl = float(self.controller.compute(ctrl_state))
-            except Exception:
+            except Exception as e:
+                print(f"[FP] controller.compute error: {e}, ctrl_state={ctrl_state}", flush=True)
                 u_ctrl = 0.0
 
         # クリック等で加える追加入力

@@ -40,7 +40,8 @@ class GenericEstimator:
             return None
         try:
             return self.strategy.estimate(u, y)
-        except Exception:
+        except Exception as e:
+            print(f"[Estimator] estimate error: {e}", flush=True)
             return None
 
     def reset(self) -> None:
