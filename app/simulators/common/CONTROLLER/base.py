@@ -40,7 +40,10 @@ class GenericController:
             return 0.0
         try:
             result = self.strategy.compute(state)
-            return float(result)
+            f_result = float(result)
+            if abs(f_result) < 1e-12:
+                print(f"[Controller] result~0: raw={result}, K={getattr(self.strategy, 'K', None)}, state_in={state}", flush=True)
+            return f_result
         except Exception as e:
             print(f"[Controller] compute error: {e}, state={state}, K={getattr(self.strategy, 'K', None)}", flush=True)
             return 0.0

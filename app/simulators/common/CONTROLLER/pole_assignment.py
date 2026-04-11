@@ -100,6 +100,8 @@ class PoleAssignmentController(_LinearControllerStrategy):
     def compute(self, state):
         x = state_vector(state, expected_dim=self.nx)
         try:
-            return -float(self.K @ x[: self.nx])
-        except Exception:
+            val = -float(self.K @ x[: self.nx])
+            return val
+        except Exception as e:
+            print(f"[PoleAssignment] compute error: {e}, K.shape={self.K.shape}, x={x}", flush=True)
             return 0.0
