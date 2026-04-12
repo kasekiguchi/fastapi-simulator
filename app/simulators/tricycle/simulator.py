@@ -108,6 +108,8 @@ class TricycleSimulator(BaseSimulator):
         for k, v in kwargs.items():
             if hasattr(self.params, k):
                 setattr(self.params, k, float(v))
+        # コントローラのゲインも再設計
+        self.controller.set_params(self.params)
 
     def set_control_params(self, control_params: Optional[Dict[str, Any]] = None) -> None:
         """制御パラメータの設定"""
