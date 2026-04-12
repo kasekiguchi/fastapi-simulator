@@ -173,7 +173,8 @@ class TricycleSimulator(BaseSimulator):
 
     def step(self) -> PublicTricycleState:
         """1ステップ進めて公開状態を返す"""
-        ref = self.reference.sample(self.state.t) if self.reference else RefSample(np.zeros(2), 0.0, 0.0, 0.0)
+        # x軸時間軸制御: リファレンスは車両のx座標に対応する点
+        ref = self.reference.sample(self.state.x) if self.reference else RefSample(np.zeros(2), 0.0, 0.0, 0.0)
         if self.control_mode == "external":
             v_cmd, alpha_cmd = self._external_input
         else:
@@ -199,7 +200,7 @@ class TricycleSimulator(BaseSimulator):
 
     def get_public_state(self) -> PublicTricycleState:
         """現在の公開状態を返す（ステップを進めない）"""
-        ref = self.reference.sample(self.state.t) if self.reference else RefSample(np.zeros(2), 0.0, 0.0, 0.0)
+        ref = self.reference.sample(self.state.x) if self.reference else RefSample(np.zeros(2), 0.0, 0.0, 0.0)
         return PublicTricycleState(
             t=self.state.t,
             x=self.state.x,
