@@ -63,3 +63,29 @@ def build_linear_model(
     if include_output:
         return A, B, C, Ad, Bd, Cd
     return A, B, Ad, Bd
+
+
+def ackermann(A: np.ndarray, B: np.ndarray, poles: Sequence) -> np.ndarray:
+    """Ackermann法による単入力系の極配置（重極対応）
+
+    Returns:
+        K: (nx,) ゲインベクトル。u = -K @ x で所望の極を配置。
+    """
+    n = A.shape[0]
+    # 可制御性行列
+    Mc = np.hstack([np.linalg.matrix_power(A, i) @ B for i in range(n)])
+    if abs(np.linalg.det(Mc)) < 1e-12:
+        raise ValueError("System is not controllable")
+    # 所望特性多項式の係数
+    poly = np.array([1.0], dtype=complex)
+    for p in poles:
+        poly = np.convolve(poly, [1, -p])
+    coeffs = np.real(poly)  # [1, a1, ..., an]
+    # phi(A) = A^n + a1*A^(n-1) + ... + an*I
+    phi_A = np.zeros_like(A, dtype=float)
+    for i, c in enumerate(coeffs):
+        phi_A += c * np.linalg.matrix_power(A, n - i)
+    e_n = np.zeros(n)
+    e_n[-1] = 1.0
+    K = e_n @ np.linalg.inv(Mc) @ phi_A
+    return K

@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 
 import numpy as np
 from scipy import signal, linalg
+from ..common.linear_utils import ackermann
 
 from .reference import RefSample
 from .state import TricycleState, TricycleParams
@@ -42,13 +43,21 @@ def _design_K_pole(A: np.ndarray, B: np.ndarray, poles_raw: List) -> tuple[np.nd
         if abs(p.imag) > 0 and np.conj(p) not in poles:
             poles.append(np.conj(p))
     poles = poles[:nx]
+    # 1. place_poles (YT法)
     try:
         res = signal.place_poles(A, B, poles)
         K = np.asarray(res.gain_matrix, dtype=float).flatten()
-        print(f"[Tricycle] pole placement: poles={poles} -> K={K}", flush=True)
+        print(f"[Tricycle] pole placement (YT): poles={poles} -> K={K}", flush=True)
         return K, None
     except Exception as e:
-        print(f"[Tricycle] pole placement failed: {e}", flush=True)
+        print(f"[Tricycle] YT failed: {e}", flush=True)
+    # 2. Ackermann法（単入力系、重極対応）
+    try:
+        K = ackermann(A, B, poles).flatten()
+        print(f"[Tricycle] pole placement (Ackermann): poles={poles} -> K={K}", flush=True)
+        return K, None
+    except Exception as e:
+        print(f"[Tricycle] Ackermann failed: {e}", flush=True)
         return np.zeros(nx, dtype=float), str(e)
 
 
