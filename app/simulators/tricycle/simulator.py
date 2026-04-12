@@ -177,6 +177,10 @@ class TricycleSimulator(BaseSimulator):
         else:
             v_cmd, alpha_cmd = self._compute_control(ref)
         self._last_control = (v_cmd, alpha_cmd)
+        # 1秒ごとにログ出力
+        t_now = self.state.t
+        if t_now % 1.0 < self.dt or t_now < self.dt:
+            print(f"[Tricycle] t={t_now:.3f} v={v_cmd:.4f} alpha={alpha_cmd:.4f} state=[{self.state.x:.3f},{self.state.y:.3f},{self.state.theta:.4f}] ref=[{ref.pos[0]:.3f},{ref.pos[1]:.3f},{ref.theta:.4f}]", flush=True)
         self._integrate(v_cmd, alpha_cmd)
         self._log_trace(ref)
         return PublicTricycleState(
