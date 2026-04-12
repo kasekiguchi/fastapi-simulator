@@ -32,6 +32,12 @@ class TricycleReference:
         if not isinstance(data, dict):
             return HoldReference()
         rtype = data.get("type")
+        # type未指定 or "point": x, y, theta から固定点リファレンスを生成
+        if rtype is None or rtype == "point":
+            x = float(data.get("x", 0.0))
+            y = float(data.get("y", 0.0))
+            theta = float(data.get("theta", 0.0))
+            return HoldReference(pos=(x, y), theta=theta)
         if rtype == "line":
             return LineReference(
                 start=np.asarray(data.get("start", [0.0, 0.0]), dtype=float),
