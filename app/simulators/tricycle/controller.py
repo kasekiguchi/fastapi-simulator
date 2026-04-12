@@ -189,7 +189,9 @@ class TricycleController:
         ], dtype=float)
 
         alpha_cmd = -float(self.K @ e)
-        alpha_cmd = max(-math.pi / 2, min(math.pi / 2, alpha_cmd))
+        # ±π/3 でクリップ（π/2 だと tan(alpha) が発散してODEが破綻する）
+        alpha_limit = math.pi / 3
+        alpha_cmd = max(-alpha_limit, min(alpha_limit, alpha_cmd))
         return v_ref, alpha_cmd
 
     def _exact_control(self, state: TricycleState, ref: RefSample) -> tuple[float, float]:
