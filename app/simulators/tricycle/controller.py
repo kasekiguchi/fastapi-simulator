@@ -188,8 +188,9 @@ class TricycleController:
             _wrap_angle(state.theta - ref.theta),
         ], dtype=float)
 
-        alpha_cmd = -float(self.K @ e)
-        alpha_cmd = max(-math.pi / 2, min(math.pi / 2, alpha_cmd))
+        u = -float(self.K @ e)
+        # atan で滑らかに飽和させる（±π/3 にスケーリング）
+        alpha_cmd = math.atan(u) * (2.0 / math.pi) * (math.pi / 3.0)
         return v_ref, alpha_cmd
 
     def _exact_control(self, state: TricycleState, ref: RefSample) -> tuple[float, float]:
