@@ -15,6 +15,7 @@ class EKFEstimator(_LinearEstimatorStrategy):
 
     def estimate(self, u: float, y):
         y_vec = state_vector(y, expected_dim=self.ny)
+        u_vec = np.atleast_1d(np.asarray(u, dtype=float))
         if self.xh is None:
             try:
                 C_use = self.Cd if (self.time_mode == "discrete" and self.Cd is not None) else self.C
@@ -23,9 +24,8 @@ class EKFEstimator(_LinearEstimatorStrategy):
             except Exception:
                 self.xh = np.zeros(self.nx)
         xh = state_vector(self.xh, expected_dim=self.nx)
-        # Unknown inputs (e.g., click) are not modeled in the estimator
         if self.time_mode == "discrete" and self.Ad is not None and self.Bd is not None and self.Cd is not None:
-            xh_pred = self.Ad @ xh
+            xh_pred = self.Ad @ xh + self.Bd @ u_vec
             P_pred = self.Ad @ self.P @ self.Ad.T + self.Qw
             S = self.Cd @ P_pred @ self.Cd.T + self.Rv
             try:
@@ -35,7 +35,7 @@ class EKFEstimator(_LinearEstimatorStrategy):
             xh = xh_pred + K @ (y_vec - self.Cd @ xh_pred)
             self.P = (np.eye(self.nx) - K @ self.Cd) @ P_pred
         else:
-            dxh = self.A @ xh
+            dxh = self.A @ xh + self.B @ u_vec
             self.P = self.P + self.dt * (self.A @ self.P + self.P @ self.A.T + self.Qw)
             try:
                 K = self.P @ self.C.T @ np.linalg.inv(self.C @ self.P @ self.C.T + self.Rv)
