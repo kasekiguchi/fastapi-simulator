@@ -40,7 +40,7 @@ class FurutaPendulumSimulator(BaseSimulator):
         initial_state: Optional[FurutaPendulumState] = None,
     ):
         self.dt = dt
-        self.control_time_mode: str = "discrete"
+        self.control_time_mode: str = "continuous"
         self.estimator_time_mode: str = "discrete"
         self.params: FurutaPendulumParams = plant_params or FurutaPendulumParams()
         self.exp_mode: bool = False
@@ -65,6 +65,9 @@ class FurutaPendulumSimulator(BaseSimulator):
         self._est_state: Optional[Any] = None
         self._last_u: float = 0.0
         self._trace: Dict[str, list] = self._empty_trace()
+
+        # デフォルト: LQR (continuous)
+        self.set_control_params({"type": "lqr", "timeMode": "continuous", "time_mode": "continuous"})
 
     def reset(self) -> None:
         """状態リセット（パラメータは維持）"""
