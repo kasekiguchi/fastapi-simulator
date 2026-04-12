@@ -16,4 +16,4 @@ class TricycleState(SimState):
 @dataclass
 class TricycleParams:
     """三輪車モデルのパラメータ"""
-    L: float = 0.5  # ホイールベース（後輪軸中心から前輪まで）
+    L: float = 0.4  # ホイールベース（後輪軸中心から前輪まで）
