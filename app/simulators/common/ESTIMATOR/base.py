@@ -116,8 +116,7 @@ class _LinearEstimatorStrategy(_BaseEstimatorStrategy):
         self.nx = self.A.shape[0]
         self.nu = self.B.shape[1]
         self.ny = self.C.shape[0]
-        if self.xh is None:
-            self.xh = np.zeros(self.nx)
+        # xh は None のままにしておき、最初の estimate() で観測から初期化する
 
     def set_params(self, params) -> None:
         self.params = params

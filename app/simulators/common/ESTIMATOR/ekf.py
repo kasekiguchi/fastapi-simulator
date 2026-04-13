@@ -12,6 +12,12 @@ class EKFEstimator(_LinearEstimatorStrategy):
         self.P = np.eye(self.nx) * 1e-3
         self.Qw = to_square_matrix(sys_noise, self.nx)
         self.Rv = to_square_matrix(meas_noise, self.ny)
+        # ゼロノイズで共分散が非正則にならないよう下限を保証
+        eps = 1e-6
+        if np.all(np.abs(self.Qw) < 1e-12):
+            self.Qw = np.eye(self.nx) * eps
+        if np.all(np.abs(self.Rv) < 1e-12):
+            self.Rv = np.eye(self.ny) * eps
 
     def estimate(self, u: float, y):
         y_vec = state_vector(y, expected_dim=self.ny)

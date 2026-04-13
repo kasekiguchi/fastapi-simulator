@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy import signal
+from scipy import signal, linalg
 
 from .base import _LinearEstimatorStrategy
 from ..linear_utils import state_vector, to_square_matrix
@@ -51,18 +51,27 @@ class ObserverEstimator(_LinearEstimatorStrategy):
             else:
                 self.Fo = np.zeros_like(self.Fo)
         elif design_type == "lqr":
+            # Observer = LQR dual: (A^T, C^T) の LQR で Fo = K^T を得る
             Q = to_square_matrix(self.design.get("Q") or [], self.nx)
             R = to_square_matrix(self.design.get("R") or [], self.ny)
             if self.time_mode == "discrete" and self.Ad is not None and self.Cd is not None:
                 try:
-                    self.Fo = np.asarray(signal.dlti(self.Ad, self.Cd).dare(Q, R)[0], dtype=float).T  # type: ignore
+                    P = linalg.solve_discrete_are(self.Ad.T, self.Cd.T, Q, R)
+                    CtP = self.Cd @ P
+                    L = np.linalg.inv(CtP @ self.Cd.T + R) @ (CtP @ self.Ad.T)
+                    self.Fo = np.asarray(L.T, dtype=float)
+                    print(f"[Observer] discrete LQR-dual Fo={self.Fo}", flush=True)
                     return
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[Observer] discrete LQR-dual failed: {e}", flush=True)
             try:
-                self.Fo = np.asarray(signal.lti(self.A, self.C).care(Q, R)[0], dtype=float).T  # type: ignore
-            except Exception:
+                P = linalg.solve_continuous_are(self.A.T, self.C.T, Q, R)
+                L = (np.linalg.inv(R) @ self.C @ P)
+                self.Fo = np.asarray(L.T, dtype=float)
+                print(f"[Observer] continuous LQR-dual Fo={self.Fo}", flush=True)
+            except Exception as e:
                 self.Fo = np.zeros_like(self.Fo)
+                print(f"[Observer] continuous LQR-dual failed: {e}", flush=True)
         else:
             self.Fo = np.zeros_like(self.Fo)
 
