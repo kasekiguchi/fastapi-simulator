@@ -319,19 +319,23 @@ class FurutaPendulumSimulator(BaseSimulator):
         ctype = self.control_params.get("type")
         strat = self.controller.strategy
 
-        # Prefer the model inside the strategy if available
-        Ad = getattr(strat, "Ad", None)
-        Bd = getattr(strat, "Bd", None)
-        if Ad is None or Bd is None:
-            try:
-                _, _, Ad, Bd = build_linear_model(
-                    lambda: (self.controller.matrices_fn(self.params)),  # type: ignore[attr-defined]
-                    self.dt,
-                    getattr(self.controller, "time_mode", "discrete"),
-                    include_output=False,
-                )
-            except Exception:
-                Ad, Bd = None, None
+        # 閉ループ極計算用の (A, B)。time_mode に合わせて離散 or 連続を使う。
+        time_mode = getattr(self.controller, "time_mode", "discrete")
+        if time_mode == "discrete":
+            A_use = getattr(strat, "Ad", None)
+            B_use = getattr(strat, "Bd", None)
+            if A_use is None or B_use is None:
+                try:
+                    _, _, A_use, B_use = build_linear_model(
+                        lambda: (self.controller.matrices_fn(self.params)),
+                        self.dt, "discrete", include_output=False,
+                    )
+                except Exception:
+                    A_use, B_use = None, None
+        else:
+            A_use = getattr(strat, "A", None)
+            B_use = getattr(strat, "B", None)
+        Ad, Bd = A_use, B_use
 
         # Handle pole assignment: expose gain and closed-loop poles if possible
         if ctype == "pole_assignment" and hasattr(strat, "K"):
@@ -354,7 +358,7 @@ class FurutaPendulumSimulator(BaseSimulator):
                     info["closed_loop_poles"] = None
             return info
 
-        # For LQR / state_feedback, expose closed-loop poles
+        # For LQR / state_feedback, expose gain and closed-loop poles
         if ctype in ("lqr", "state_feedback") and (hasattr(strat, "gain") or hasattr(strat, "K")):
             # Get gain as 2D matrix
             K = None
@@ -369,6 +373,12 @@ class FurutaPendulumSimulator(BaseSimulator):
                     K = g.reshape(1, -1)
                 except Exception:
                     K = None
+
+            if K is not None:
+                try:
+                    info["feedback_gain"] = K.tolist()
+                except Exception:
+                    info["feedback_gain"] = None
 
             if Ad is None or Bd is None or K is None:
                 return info
