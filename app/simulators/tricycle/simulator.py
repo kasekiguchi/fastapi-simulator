@@ -24,6 +24,10 @@ class PublicTricycleState(SimState):
     ref_x: float = 0.0
     ref_y: float = 0.0
     ref_theta: float = 0.0
+    # 設計されたフィードバックゲイン（2要素: [K1, K2]）
+    feedback_gain: Optional[list] = None
+    # 閉ループ極（参考用、Acl = A - B @ K の固有値）
+    closed_loop_poles: Optional[list] = None
 
 
 def _tricycle_ode(t, state, v, alpha, L):
@@ -171,6 +175,21 @@ class TricycleSimulator(BaseSimulator):
             return self.controller.compute(self.state, ref)
         return ref.v, ref.alpha
 
+    def _compute_control_info(self) -> tuple[Optional[list], Optional[list]]:
+        """現在のコントローラから K と閉ループ極を返す。"""
+        if not self.controller or not hasattr(self.controller, "K"):
+            return None, None
+        try:
+            K = np.asarray(self.controller.K, dtype=float).flatten().tolist()
+            # 閉ループ極: 2次系の A - B*K
+            A, B = self.controller._get_system_matrices()
+            Acl = A - B @ np.asarray(self.controller.K).reshape(1, -1)
+            eigs = np.linalg.eigvals(Acl)
+            poles = [{"re": float(e.real), "im": float(e.imag)} for e in eigs]
+            return K, poles
+        except Exception:
+            return None, None
+
     def step(self) -> PublicTricycleState:
         """1ステップ進めて公開状態を返す"""
         # x軸時間軸制御: リファレンスは車両のx座標に対応する点
@@ -186,6 +205,7 @@ class TricycleSimulator(BaseSimulator):
             print(f"[Tricycle] t={t_now:.3f} v={v_cmd:.4f} alpha={alpha_cmd:.4f} state=[{self.state.x:.3f},{self.state.y:.3f},{self.state.theta:.4f}] ref=[{ref.pos[0]:.3f},{ref.pos[1]:.3f},{ref.theta:.4f}]", flush=True)
         self._integrate(v_cmd, alpha_cmd)
         self._log_trace(ref)
+        K, poles = self._compute_control_info()
         return PublicTricycleState(
             t=self.state.t,
             x=self.state.x,
@@ -196,6 +216,8 @@ class TricycleSimulator(BaseSimulator):
             ref_x=float(ref.pos[0]),
             ref_y=float(ref.pos[1]),
             ref_theta=float(ref.theta),
+            feedback_gain=K,
+            closed_loop_poles=poles,
         )
 
     def get_public_state(self) -> PublicTricycleState:
