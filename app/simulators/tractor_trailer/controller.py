@@ -94,6 +94,10 @@ class TractorTrailerController:
         self.params = params
         self.mode = "approximate"
         self.design = "manual"
+        # 前進/後進フラグ（'forward' | 'backward'）
+        # 'backward' の場合、仮想時間軸を x2' = -x2 として扱い、
+        # システム行列 A, B の符号を反転してゲイン設計する。
+        self.direction: str = "forward"
         # ゲイン K (3,): 3次システム [e1, e2, e3] に対するフィードバック
         self.K = np.array([1.0, 2.0, 3.0], dtype=float)
         self.v_ref = 1.0
@@ -133,6 +137,11 @@ class TractorTrailerController:
                 [0.0, 0.0, -1.0 / L2],
             ])
             B = np.array([[0.0], [0.0], [1.0 / L1]])
+        # 後進: 仮想時間軸 x2' = -x2 では dz/dx2' = -dz/dx2 なので
+        # システム行列も符号反転。これに対してゲインを設計する。
+        if self.direction == "backward":
+            A = -A
+            B = -B
         return A, B
 
     def _redesign_gain(self) -> None:
@@ -149,6 +158,9 @@ class TractorTrailerController:
             return
         self.mode = control_params.get("type", self.mode)
         self.design = control_params.get("design", self.design)
+        direction = control_params.get("direction")
+        if direction in ("forward", "backward"):
+            self.direction = direction
 
         v_ref = control_params.get("v_ref")
         if v_ref is not None:
@@ -219,7 +231,9 @@ class TractorTrailerController:
         # ±π/3 でクリップ（tan(alpha)発散防止）
         alpha_limit = math.pi / 3
         alpha_cmd = max(-alpha_limit, min(alpha_limit, alpha_cmd))
-        return v_ref, alpha_cmd
+        # 後進時は v を反転
+        sign = -1.0 if self.direction == "backward" else 1.0
+        return sign * abs(v_ref), alpha_cmd
 
     def _exact_control(self, state: TractorTrailerState, ref: RefSample) -> tuple[float, float]:
         """厳密線形化制御（x軸時間軸、3重積分器正準形）
@@ -275,4 +289,6 @@ class TractorTrailerController:
             alpha_cmd = 0.0
 
         alpha_cmd = max(-math.pi / 3, min(math.pi / 3, alpha_cmd))
-        return float(v_ref), float(alpha_cmd)
+        # 後進時は v を反転
+        sign = -1.0 if self.direction == "backward" else 1.0
+        return float(sign * abs(v_ref)), float(alpha_cmd)
