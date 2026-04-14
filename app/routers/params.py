@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..runtime import get_manager
+from ..runtime import create_manager as get_manager  # REST は各呼び出しで独立マネージャ（主要は WebSocket）
 
 router = APIRouter(prefix="/sim", tags=["sim"])
 
